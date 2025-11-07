@@ -60,13 +60,14 @@ export interface Quote {
 }
 
 export interface ProductOrService {
-  id: string;
-  name: string;
-  description: string;
-  type: 'Product' | 'Service';
-  unitPrice: number;
-  stockLevel?: number;
-  reorderPoint?: number;
+   id: string;
+   name: string;
+   description: string;
+   type: 'Product' | 'Service';
+   unitPrice: number;
+   price?: number;
+   stockLevel?: number;
+   reorderPoint?: number;
 }
 
 export interface PurchaseLineItem {

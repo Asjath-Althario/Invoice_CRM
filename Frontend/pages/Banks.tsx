@@ -3,12 +3,12 @@ import { Plus, Edit, Trash2, X, Landmark, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 // FIX: Corrected import paths for the new file location
 import type { BankAccount } from '../types';
-import { getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount } from '../data/mockData';
+import { apiService } from '../services/api';
 import { formatCurrency } from '../utils/formatting';
 import eventBus from '../utils/eventBus';
 
 const BankAccountModal = ({ account, onClose, onSave }: { account: Partial<BankAccount> | null, onClose: () => void, onSave: (account: BankAccount) => void }) => {
-    const [formData, setFormData] = useState<Partial<BankAccount>>(account || { accountName: '', bankName: '', accountNumber: '', balance: 0 });
+    const [formData, setFormData] = useState<Partial<BankAccount>>(account || { accountName: '', bankName: '', accountNumber: '', balance: 0, type: 'Bank' });
 
     if (!account) return null;
 
@@ -19,6 +19,13 @@ const BankAccountModal = ({ account, onClose, onSave }: { account: Partial<BankA
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('Form data before validation:', formData); // Debug log
+        // Ensure all required fields are provided
+        if (!formData.accountName?.trim() || !formData.bankName?.trim() || !formData.accountNumber?.trim()) {
+            alert('Please fill in all required fields.');
+            return;
+        }
+        console.log('Form data being submitted:', formData); // Debug log
         onSave(formData as BankAccount);
     };
 
@@ -59,33 +66,53 @@ const Banks: React.FC = () => {
     const [selectedAccount, setSelectedAccount] = useState<Partial<BankAccount> | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const refreshData = () => setAccounts(getBankAccounts());
-    
+    const refreshData = async () => {
+        try {
+            const data = await apiService.getBankAccounts();
+            setAccounts(data);
+        } catch (error) {
+            console.error('Failed to fetch bank accounts:', error);
+        }
+    };
+
     useEffect(() => {
         refreshData();
         const unsubscribe = eventBus.on('dataChanged', refreshData);
         return () => unsubscribe();
     }, []);
 
-    const handleSaveAccount = (accountToSave: BankAccount) => {
-        if (accountToSave.id && accounts.some(a => a.id === accountToSave.id)) {
-            updateBankAccount(accountToSave);
-        } else {
-            addBankAccount(accountToSave);
+    const handleSaveAccount = async (accountToSave: BankAccount) => {
+        try {
+            if (accountToSave.id && accounts.some(a => a.id === accountToSave.id)) {
+                await apiService.updateBankAccount(accountToSave.id, accountToSave);
+            } else {
+                await apiService.createBankAccount(accountToSave);
+            }
+            setSelectedAccount(null);
+            eventBus.emit('dataChanged');
+            refreshData();
+        } catch (error) {
+            console.error('Failed to save bank account:', error);
+            alert('Failed to save bank account. Please check all required fields.');
         }
-        setSelectedAccount(null);
     };
 
-    const handleDeleteAccount = (accountId: string) => {
+    const handleDeleteAccount = async (accountId: string) => {
         if (window.confirm('Are you sure you want to delete this bank account?')) {
-            deleteBankAccount(accountId);
+            try {
+                await apiService.deleteBankAccount(accountId);
+                refreshData();
+            } catch (error) {
+                console.error('Failed to delete bank account:', error);
+                alert('Failed to delete bank account. Please try again.');
+            }
         }
     };
     
     const filteredAccounts = accounts.filter(account =>
-        account.accountName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        account.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        account.accountNumber.includes(searchTerm)
+        (account.accountName || account.account_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (account.bankName || account.bank_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (account.accountNumber || account.account_number || '').includes(searchTerm)
     );
 
     return (
@@ -119,10 +146,10 @@ const Banks: React.FC = () => {
                         <div>
                             <div className="flex items-center mb-2">
                                 <Landmark size={20} className="text-gray-400 dark:text-gray-500 mr-3" />
-                                <h2 className="text-lg font-semibold text-dark dark:text-white truncate">{account.accountName}</h2>
+                                <h2 className="text-lg font-semibold text-dark dark:text-white truncate">{account.accountName || account.account_name}</h2>
                             </div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{account.bankName}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{account.accountNumber.slice(-4).padStart(account.accountNumber.length, '*')}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{account.bankName || account.bank_name}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{(account.accountNumber || account.account_number || '').slice(-4).padStart((account.accountNumber || account.account_number || '').length, '*')}</p>
                             <p className="text-2xl font-bold text-dark dark:text-white mt-4 font-mono">{formatCurrency(account.balance)}</p>
                         </div>
                         <div className="mt-6 flex items-center justify-between">

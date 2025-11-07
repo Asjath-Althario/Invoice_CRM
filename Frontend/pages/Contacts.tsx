@@ -7,7 +7,7 @@ import { apiService } from '../services/api';
 import eventBus from '../utils/eventBus';
 
 const ContactModal = ({ contact, onClose, onSave }: { contact: Partial<Contact> | null, onClose: () => void, onSave: (contact: Contact) => void }) => {
-    const [formData, setFormData] = useState<Partial<Contact>>(contact || { name: '', email: '', address: '', phone: '', type: 'Customer' });
+    const [formData, setFormData] = useState<Partial<Contact>>(contact || { name: '', email: '', address: '', phone: '', type: 'Customer', trn: '' });
 
     if (!contact) return null;
 
@@ -18,7 +18,9 @@ const ContactModal = ({ contact, onClose, onSave }: { contact: Partial<Contact> 
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData as Contact);
+        // Ensure type is set to default if not provided
+        const contactData = { ...formData, type: formData.type || 'Customer' };
+        onSave(contactData as Contact);
     };
 
     return (

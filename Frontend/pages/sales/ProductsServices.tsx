@@ -126,7 +126,7 @@ const ProductsServices: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{item.name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 truncate max-w-sm">{item.description}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{item.type}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono dark:text-gray-200">{formatCurrency(item.unitPrice)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono dark:text-gray-200">{formatCurrency(item.price || item.unitPrice)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
                                     <button onClick={() => setSelectedItem(item)} className="text-primary hover:text-primary/80 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={18}/></button>
                                     <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 dark:text-red-500 dark:hover:text-red-400"><Trash2 size={18}/></button>

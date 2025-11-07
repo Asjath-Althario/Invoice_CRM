@@ -1,36 +1,34 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-require('dotenv').config();
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 class GeminiService {
-  static async extractPurchaseDetails(fileBuffer, mimeType) {
+  constructor() {
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+
+  async extractPurchaseDetails(imageBuffer, mimeType) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const prompt = `
-        Analyze this purchase receipt/invoice image and extract the following information in JSON format:
+        Analyze this receipt image and extract the following information in JSON format:
         {
-          "vendorName": "string",
-          "purchaseDate": "YYYY-MM-DD",
-          "totalAmount": number,
-          "lineItems": [
+          "supplier": "supplier name",
+          "invoice_number": "invoice number",
+          "date": "date in YYYY-MM-DD format",
+          "items": [
             {
-              "description": "string",
-              "quantity": number,
-              "unitPrice": number,
-              "total": number
+              "description": "item description",
+              "quantity": quantity,
+              "unit_price": unit_price,
+              "total": total
             }
-          ]
+          ],
+          "subtotal": subtotal,
+          "tax": tax_amount,
+          "total": total_amount
         }
 
-        Rules:
-        - Extract vendor/supplier name
-        - Extract purchase date in YYYY-MM-DD format
-        - Extract total amount as a number
-        - Extract line items with description, quantity, unit price, and total
-        - If any field is not found, use null or empty array
-        - Return only valid JSON, no additional text
+        If any information is not available, use null or empty string.
       `;
 
       const result = await model.generateContent([
@@ -38,47 +36,37 @@ class GeminiService {
         {
           inlineData: {
             mimeType: mimeType,
-            data: fileBuffer.toString('base64')
+            data: imageBuffer.toString('base64')
           }
         }
       ]);
 
-      const response = await result.response;
-      const text = response.text();
-
-      // Clean the response to ensure it's valid JSON
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('Invalid JSON response from Gemini');
-      }
-
-      return JSON.parse(jsonMatch[0]);
+      const response = result.response.text();
+      return JSON.parse(response);
     } catch (error) {
-      console.error('Gemini API error:', error);
-      throw new Error('Failed to extract purchase details');
+      console.error('Gemini service error:', error);
+      throw new Error('Failed to extract purchase details from image');
     }
   }
 
-  static async chat(message, history = []) {
+  async chat(message, history = []) {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const chat = model.startChat({
         history: history.map(h => ({
           role: h.role,
-          parts: [{ text: h.text }]
+          parts: [{ text: h.content }]
         }))
       });
 
       const result = await chat.sendMessage(message);
-      const response = await result.response;
-
-      return response.text();
+      return result.response.text();
     } catch (error) {
       console.error('Gemini chat error:', error);
-      throw new Error('Failed to get chat response');
+      throw new Error('Failed to process chat message');
     }
   }
 }
 
-module.exports = GeminiService;
+module.exports = new GeminiService();

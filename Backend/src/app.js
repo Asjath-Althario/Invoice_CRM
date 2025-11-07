@@ -6,17 +6,26 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
+// CORS middleware for development
+app.use((req, res, next) => {
+  const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost'];
+  const origin = req.headers.origin;
 
-// Explicit CORS configuration to ensure preflight (OPTIONS) requests are handled correctly
-const corsOptions = {
-  origin: true, // reflect request origin
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
+
+  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -33,6 +42,7 @@ const bankAccountRoutes = require('./routes/bankAccounts');
 const pettyCashRoutes = require('./routes/pettyCash');
 const aiRoutes = require('./routes/ai');
 const purchaseUploadRoutes = require('./routes/purchaseUploads');
+const settingsRoutes = require('./routes/settings');
 
 // API routes
 app.use('/api/auth', authRoutes);
@@ -44,6 +54,7 @@ app.use('/api/bank-accounts', bankAccountRoutes);
 app.use('/api/petty-cash', pettyCashRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/purchase-uploads', purchaseUploadRoutes);
+app.use('/api', settingsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

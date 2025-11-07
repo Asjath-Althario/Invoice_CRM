@@ -1,6 +1,5 @@
-// Set API base to the backend directly to avoid Apache (port 80) 403 responses when running the frontend from htdocs.
-const API_BASE_URL = 'http://localhost:5001/api';
-
+// Set API base to go through Apache proxy to avoid CORS issues
+const API_BASE_URL = 'http://localhost:54112/api';
 class ApiService {
   private token: string | null = null;
 
@@ -100,6 +99,10 @@ class ApiService {
     return this.request('/invoices');
   }
 
+  async getInvoiceById(id: string) {
+    return this.request(`/invoices/${id}`);
+  }
+
   async createInvoice(invoice: any) {
     return this.request('/invoices', {
       method: 'POST',
@@ -180,6 +183,7 @@ class ApiService {
   }
 
   async createBankAccount(account: any) {
+    console.log('Sending bank account data:', account); // Debug log
     return this.request('/bank-accounts', {
       method: 'POST',
       body: JSON.stringify(account),

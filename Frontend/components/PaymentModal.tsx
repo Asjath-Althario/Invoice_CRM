@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { Invoice, BankAccount } from '../types';
-import { updateInvoice, addBankTransaction, getBankAccounts } from '../data/mockData';
+import { apiService } from '../services/api';
 import { formatCurrency } from '../utils/formatting';
 
 interface PaymentModalProps {
@@ -18,34 +18,60 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose }) => {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   useEffect(() => {
-    if (invoice) {
-      setAmount(invoice.total);
-      const accounts = getBankAccounts();
-      setBankAccounts(accounts);
-      if (accounts.length > 0) {
-        setDepositToAccountId(accounts[0].id);
+    const loadBankAccounts = async () => {
+      if (invoice) {
+        setAmount(invoice.total);
+        try {
+          const accounts = await apiService.getBankAccounts() as BankAccount[];
+          console.log('Loaded bank accounts:', accounts); // Debug log
+          setBankAccounts(accounts);
+          if (accounts.length > 0) {
+            setDepositToAccountId(accounts[0].id);
+          } else {
+            console.warn('No bank accounts found'); // Debug log
+          }
+        } catch (error) {
+          console.error('Failed to load bank accounts:', error);
+          // Show user-friendly error message
+          alert('Unable to load bank accounts. Please ensure you are logged in and try again.');
+        }
       }
-    }
+    };
+    loadBankAccounts();
   }, [invoice]);
   
   if (!invoice) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!depositToAccountId) {
       alert('Please select an account to deposit to.');
       return;
     }
-    
-    updateInvoice({ ...invoice, status: 'Paid' });
 
-    addBankTransaction({
-      accountId: depositToAccountId,
-      date: paymentDate,
-      description: `Payment for Invoice #${invoice.invoiceNumber}`,
-      amount: amount,
-    });
-    
-    onClose();
+    try {
+      console.log('Recording payment for invoice:', invoice.id);
+      console.log('Payment data:', { paymentDate, amount, depositToAccountId });
+
+      // Update invoice status to Paid - only send necessary fields
+      const invoiceUpdate = {
+        status: 'Paid',
+        // Don't include dates that might cause issues
+      };
+      await apiService.updateInvoice(invoice.id, invoiceUpdate);
+
+      // Add bank transaction
+      await apiService.addBankTransaction(depositToAccountId, {
+        date: paymentDate,
+        description: `Payment for Invoice #${invoice.invoiceNumber}`,
+        amount: amount,
+        type: 'credit' // This is income to the business
+      });
+
+      onClose();
+    } catch (error) {
+      console.error('Failed to record payment:', error);
+      alert('Failed to record payment. Please try again.');
+    }
   };
 
   return (
@@ -80,7 +106,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose }) => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deposit to Account</label>
               <select value={depositToAccountId} onChange={e => setDepositToAccountId(e.target.value)} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                   <option value="">Select account...</option>
-                  {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.accountName} ({acc.bankName})</option>)}
+                  {bankAccounts.length === 0 ? (
+                    <option disabled>No accounts available</option>
+                  ) : (
+                    bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.accountName || acc.account_name} ({acc.bankName || acc.bank_name})</option>)
+                  )}
               </select>
             </div>
           </div>

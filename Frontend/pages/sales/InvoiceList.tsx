@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, Trash2, DollarSign } from 'lucide-react';
-import { getInvoices, deleteInvoice } from '../../data/mockData';
+import { Edit, Trash2, DollarSign, Plus } from 'lucide-react';
+import { apiService } from '../../services/api';
 import type { Invoice } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
@@ -24,7 +24,14 @@ const InvoiceList: React.FC = () => {
     const [invoiceToPay, setInvoiceToPay] = useState<Invoice | null>(null);
     const navigate = useNavigate();
 
-    const refreshInvoices = () => setInvoices(getInvoices());
+    const refreshInvoices = async () => {
+        try {
+            const data = await apiService.getInvoices();
+            setInvoices(data);
+        } catch (error) {
+            console.error('Failed to load invoices:', error);
+        }
+    };
 
     useEffect(() => {
         refreshInvoices();
@@ -32,15 +39,33 @@ const InvoiceList: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleDelete = (invoiceId: string) => {
+    const handleDelete = async (invoiceId: string) => {
         if (window.confirm('Are you sure you want to delete this invoice?')) {
-            deleteInvoice(invoiceId);
+            try {
+                await apiService.deleteInvoice(invoiceId);
+                refreshInvoices();
+            } catch (error) {
+                console.error('Failed to delete invoice:', error);
+                alert('Failed to delete invoice. Please try again.');
+            }
         }
     };
     
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-            <div className="overflow-x-auto">
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold text-dark dark:text-light">Invoices</h1>
+                <button
+                    onClick={() => navigate('/sales/invoice')}
+                    className="flex items-center bg-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-primary/90 transition-colors"
+                >
+                    <Plus size={20} className="mr-2" />
+                    New Invoice
+                </button>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <div className="overflow-x-auto">
                 <table className="min-w-full bg-white dark:bg-gray-800">
                     <thead className="bg-gray-50 dark:bg-transparent border-b border-gray-200 dark:border-gray-600">
                         <tr>
@@ -57,7 +82,7 @@ const InvoiceList: React.FC = () => {
                         {invoices.map((invoice) => (
                             <tr key={invoice.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary dark:text-blue-400 hover:underline cursor-pointer" onClick={() => navigate(`/sales/invoice/${invoice.id}`)}>{invoice.invoiceNumber}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{invoice.contact.name}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{invoice.contact_name || invoice.contact?.name || 'N/A'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.issueDate}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.dueDate}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-mono">{formatCurrency(invoice.total)}</td>
@@ -85,6 +110,7 @@ const InvoiceList: React.FC = () => {
                 </table>
             </div>
             <PaymentModal invoice={invoiceToPay} onClose={() => setInvoiceToPay(null)} />
+        </div>
         </div>
     );
 };

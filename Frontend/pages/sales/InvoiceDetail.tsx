@@ -4,6 +4,7 @@ import { Plus, Trash2, Save, DollarSign, Printer, MessageSquare, X } from 'lucid
 import { apiService } from '../../services/api';
 import type { Invoice, InvoiceItem, Contact, ProductOrService, CompanyProfile } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
+import eventBus from '../../utils/eventBus';
 import PaymentModal from '../../components/PaymentModal';
 import PrintableInvoice from '../../components/PrintableInvoice';
 
@@ -40,16 +41,24 @@ const InvoiceDetail: React.FC = () => {
                     apiService.getPreferences()
                 ]);
 
-                setContacts((contactsData as Contact[]).filter(c => c.type === 'Customer'));
+                console.log('Contacts data:', contactsData);
+                const filteredContacts = (contactsData as Contact[]).filter(c => c.type === 'Customer');
+                console.log('Filtered contacts:', filteredContacts);
+                setContacts(filteredContacts);
                 setProducts(productsData);
                 setCompanyProfile(companyData);
                 setPreferences(prefsData);
 
                 if (invoiceId) {
-                    const invoicesData = await apiService.getInvoices();
-                    const existingInvoice = (invoicesData as Invoice[]).find(inv => inv.id === invoiceId);
-                    if (existingInvoice) {
-                        setInvoice(existingInvoice);
+                    const invoiceData = await apiService.getInvoiceById(invoiceId) as Invoice;
+                    if (invoiceData) {
+                        setInvoice({
+                            ...invoiceData,
+                            tax: invoiceData.tax || 0,
+                            total: invoiceData.total || 0,
+                            comments: invoiceData.comments || '',
+                            items: invoiceData.items || []
+                        });
                     }
                 }
             } catch (error) {
@@ -97,7 +106,7 @@ const InvoiceDetail: React.FC = () => {
         const newItems = [...(invoice.items || [])];
         const item = { ...newItems[index] };
         item.description = product.name;
-        item.unitPrice = product.unitPrice;
+        item.unitPrice = product.price || product.unitPrice || 0;
         item.total = item.quantity * item.unitPrice;
         newItems[index] = item;
         setInvoice(prev => ({ ...prev, items: newItems }));
@@ -129,11 +138,28 @@ const InvoiceDetail: React.FC = () => {
             return;
         }
         try {
+            const invoiceData = {
+                contact_id: invoice.contact.id,
+                issue_date: invoice.issueDate,
+                due_date: invoice.dueDate,
+                subtotal: invoice.subtotal,
+                tax: invoice.tax,
+                total: invoice.total,
+                comments: invoice.comments,
+                items: invoice.items?.map(item => ({
+                    description: item.description,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    total: item.total
+                }))
+            };
+
             if (invoiceId) {
-                await apiService.updateInvoice(invoiceId, invoice as Invoice);
+                await apiService.updateInvoice(invoiceId, invoiceData);
             } else {
-                await apiService.createInvoice(invoice as Invoice);
+                await apiService.createInvoice(invoiceData);
             }
+            eventBus.emit('dataChanged');
             navigate('/sales/invoices');
         } catch (error) {
             console.error('Failed to save invoice:', error);
@@ -267,7 +293,7 @@ const InvoiceDetail: React.FC = () => {
                                             <ul className="absolute z-10 w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
                                                 {suggestions.map(p => (
                                                     <li key={p.id} onClick={() => handleSuggestionClick(index, p)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-sm dark:text-gray-200">
-                                                        {p.name} - <span className="text-xs text-gray-500 dark:text-gray-400">{formatCurrency(p.unitPrice)}</span>
+                                                        {p.name} - <span className="text-xs text-gray-500 dark:text-gray-400">{formatCurrency(p.price || p.unitPrice || 0)}</span>
                                                     </li>
                                                 ))}
                                             </ul>

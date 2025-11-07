@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { Purchase, BankAccount } from '../types';
-import { updatePurchase, addBankTransaction, getBankAccounts } from '../data/mockData';
+import { apiService } from '../services/api';
 import { formatCurrency } from '../utils/formatting';
+import eventBus from '../utils/eventBus';
 
 interface PurchasePaymentModalProps {
   purchase: Purchase | null;
@@ -18,36 +19,54 @@ const PurchasePaymentModal: React.FC<PurchasePaymentModalProps> = ({ purchase, o
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   useEffect(() => {
-    if (purchase) {
-      setAmount(purchase.total);
-      const accounts = getBankAccounts();
-      setBankAccounts(accounts);
-      if (accounts.length > 0) {
-        setPaidFromAccountId(accounts[0].id);
+    const loadData = async () => {
+      if (purchase) {
+        setAmount(purchase.total);
+        try {
+          const accounts = await apiService.getBankAccounts() as BankAccount[];
+          console.log('Loaded bank accounts:', accounts); // Debug log
+          setBankAccounts(accounts);
+          if (accounts.length > 0) {
+            setPaidFromAccountId(accounts[0].id);
+          } else {
+            console.warn('No bank accounts found'); // Debug log
+          }
+        } catch (error) {
+          console.error('Failed to load bank accounts:', error);
+          // Show user-friendly error message
+          alert('Unable to load bank accounts. Please ensure you are logged in and try again.');
+        }
       }
-    }
+    };
+    loadData();
   }, [purchase]);
 
   if (!purchase) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!paidFromAccountId) {
       alert('Please select an account to pay from.');
       return;
     }
-    
-    // Update purchase status to 'Paid'
-    updatePurchase({ ...purchase, status: 'Paid' });
 
-    // Add a negative bank transaction for the payment
-    addBankTransaction({
-      accountId: paidFromAccountId,
-      date: paymentDate,
-      description: `Payment for Purchase from ${purchase.vendor || 'N/A'}`,
-      amount: -amount, // Negative amount as it's a payment
-    });
-    
-    onClose();
+    try {
+      // Update purchase status to 'Paid'
+      await apiService.updatePurchase(purchase.id, { ...purchase, status: 'Paid' });
+
+      // Add a negative bank transaction for the payment
+      await apiService.addBankTransaction(paidFromAccountId, {
+        date: paymentDate,
+        description: `Payment for Purchase from ${purchase.vendor || purchase.supplier?.name || 'N/A'}`,
+        amount: -amount, // Negative amount as it's a payment
+        type: 'debit' // Assuming debit for payments
+      });
+
+      eventBus.emit('dataChanged');
+      onClose();
+    } catch (error) {
+      console.error('Failed to process payment:', error);
+      alert('Failed to process payment. Please try again.');
+    }
   };
 
   return (
@@ -82,7 +101,11 @@ const PurchasePaymentModal: React.FC<PurchasePaymentModalProps> = ({ purchase, o
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Paid from Account</label>
               <select value={paidFromAccountId} onChange={e => setPaidFromAccountId(e.target.value)} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                   <option value="">Select account...</option>
-                  {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.accountName} ({acc.bankName})</option>)}
+                  {bankAccounts.length === 0 ? (
+                    <option disabled>No accounts available</option>
+                  ) : (
+                    bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.accountName || acc.account_name} ({acc.bankName || acc.bank_name})</option>)
+                  )}
               </select>
             </div>
           </div>

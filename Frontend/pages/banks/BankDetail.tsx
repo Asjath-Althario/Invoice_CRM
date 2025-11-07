@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Info } from 'lucide-react';
-import { getBankAccounts, getBankTransactions } from '../../data/mockData';
+import { apiService } from '../../services/api';
 import type { BankAccount, BankTransaction } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
@@ -13,10 +13,20 @@ const BankDetail: React.FC = () => {
     const [transactions, setTransactions] = useState<BankTransaction[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const refreshData = () => {
+    const refreshData = async () => {
         if (accountId) {
-            setAccount(getBankAccounts().find(acc => acc.id === accountId));
-            setTransactions(getBankTransactions(accountId));
+            try {
+                const accounts = await apiService.getBankAccounts() as BankAccount[];
+                const account = accounts.find(acc => acc.id === accountId);
+                setAccount(account);
+
+                if (account) {
+                    const transactions = await apiService.getBankTransactions(accountId) as BankTransaction[];
+                    setTransactions(transactions);
+                }
+            } catch (error) {
+                console.error('Failed to load bank account details:', error);
+            }
         }
     };
     
@@ -30,7 +40,7 @@ const BankDetail: React.FC = () => {
         return <div className="p-6 text-center dark:text-white">Bank account not found.</div>;
     }
 
-    const isPettyCash = account.type === 'Cash';
+    const isPettyCash = account.type === 'Cash' || account.type === 'Petty Cash';
 
     return (
         <div className="space-y-6">
@@ -42,8 +52,8 @@ const BankDetail: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold text-dark dark:text-light">{account.accountName}</h1>
-                        <p className="text-gray-500 dark:text-gray-400">{account.bankName} - {account.accountNumber}</p>
+                        <h1 className="text-2xl font-bold text-dark dark:text-light">{account.account_name || account.accountName}</h1>
+                        <p className="text-gray-500 dark:text-gray-400">{account.bank_name || account.bankName} - {account.account_number || account.accountNumber}</p>
                     </div>
                     <div className="text-right">
                          <p className="text-sm text-gray-500 dark:text-gray-400">Current Balance</p>
