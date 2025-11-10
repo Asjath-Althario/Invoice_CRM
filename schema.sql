@@ -170,6 +170,68 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 -- Insert default company profile
 INSERT IGNORE INTO company_profile (id) VALUES ('default');
 
+-- Recurring Invoices table
+CREATE TABLE IF NOT EXISTS recurring_invoices (
+  id VARCHAR(36) PRIMARY KEY,
+  contact_id VARCHAR(36),
+  start_date DATE NOT NULL,
+  end_date DATE,
+  frequency ENUM('Daily', 'Weekly', 'Monthly', 'Yearly') NOT NULL,
+  status ENUM('Active', 'Paused', 'Finished') DEFAULT 'Active',
+  subtotal DECIMAL(10,2) DEFAULT 0.00,
+  tax_amount DECIMAL(10,2) DEFAULT 0.00,
+  total_amount DECIMAL(10,2) DEFAULT 0.00,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id)
+);
+
+-- Recurring Invoice items table
+CREATE TABLE IF NOT EXISTS recurring_invoice_items (
+  id VARCHAR(36) PRIMARY KEY,
+  recurring_invoice_id VARCHAR(36) NOT NULL,
+  product_id VARCHAR(36),
+  description TEXT NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (recurring_invoice_id) REFERENCES recurring_invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+-- Quotes table
+CREATE TABLE IF NOT EXISTS quotes (
+  id VARCHAR(36) PRIMARY KEY,
+  quote_number VARCHAR(50) UNIQUE NOT NULL,
+  contact_id VARCHAR(36),
+  issue_date DATE NOT NULL,
+  expiry_date DATE NOT NULL,
+  status ENUM('Draft', 'Sent', 'Accepted', 'Declined', 'Converted') DEFAULT 'Draft',
+  subtotal DECIMAL(10,2) DEFAULT 0.00,
+  tax_amount DECIMAL(10,2) DEFAULT 0.00,
+  total_amount DECIMAL(10,2) DEFAULT 0.00,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id)
+);
+
+-- Quote items table
+CREATE TABLE IF NOT EXISTS quote_items (
+  id VARCHAR(36) PRIMARY KEY,
+  quote_id VARCHAR(36) NOT NULL,
+  product_id VARCHAR(36),
+  description TEXT NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
 -- Insert default admin user (password: password123)
 INSERT IGNORE INTO users (id, name, email, password_hash, role, status)
 VALUES (

@@ -6,33 +6,22 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-// CORS middleware for development
-app.use((req, res, next) => {
-  const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost'];
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin) || !origin) {
-    res.header('Access-Control-Allow-Origin', origin || '*');
-  }
-
-  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-
+app.use(cors({
+  origin: '*', // Allow all origins for development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Auth middleware
+const authMiddleware = require('./middleware/authMiddleware');
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
+const quotesRouter = require('./routes/quotes');
 const authRoutes = require('./routes/auth');
 const contactRoutes = require('./routes/contacts');
 const invoiceRoutes = require('./routes/invoices');
@@ -43,18 +32,23 @@ const pettyCashRoutes = require('./routes/pettyCash');
 const aiRoutes = require('./routes/ai');
 const purchaseUploadRoutes = require('./routes/purchaseUploads');
 const settingsRoutes = require('./routes/settings');
+const recurringInvoiceRoutes = require('./routes/recurringInvoices');
 
-// API routes
+// Public routes
 app.use('/api/auth', authRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/purchases', purchaseRoutes);
-app.use('/api/products-services', productRoutes);
-app.use('/api/bank-accounts', bankAccountRoutes);
-app.use('/api/petty-cash', pettyCashRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/purchase-uploads', purchaseUploadRoutes);
-app.use('/api', settingsRoutes);
+
+// Protected routes
+app.use('/api/quotes', authMiddleware, quotesRouter);
+app.use('/api/contacts', authMiddleware, contactRoutes);
+app.use('/api/invoices', authMiddleware, invoiceRoutes);
+app.use('/api/purchases', authMiddleware, purchaseRoutes);
+app.use('/api/products-services', authMiddleware, productRoutes);
+app.use('/api/bank-accounts', authMiddleware, bankAccountRoutes);
+app.use('/api/petty-cash', authMiddleware, pettyCashRoutes);
+app.use('/api/ai', authMiddleware, aiRoutes);
+app.use('/api/purchase-uploads', authMiddleware, purchaseUploadRoutes);
+app.use('/api/recurring-invoices', authMiddleware, recurringInvoiceRoutes);
+app.use('/api', authMiddleware, settingsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

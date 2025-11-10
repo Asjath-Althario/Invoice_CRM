@@ -111,7 +111,7 @@ router.get('/:id/transactions', authMiddleware, async (req, res) => {
 router.post('/:id/transactions', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, amount, description, date } = req.body;
+    const { amount, description, date } = req.body;
     const transactionId = uuidv4();
 
     // Convert date to proper format if it's an ISO string

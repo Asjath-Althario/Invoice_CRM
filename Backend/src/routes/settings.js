@@ -30,7 +30,7 @@ router.put('/company-profile', authMiddleware, async (req, res) => {
     const { name, address, email, phone, logoUrl } = req.body;
 
     await db.query(
-      'UPDATE company_profile SET company_name = ?, address = ?, phone = ?, email = ?, logo_url = ?, updated_at = NOW() WHERE id = ?',
+      'UPDATE company_profile SET name = ?, address = ?, phone = ?, email = ?, logo_url = ? WHERE id = ?',
       [name, address, phone, email, logoUrl, 'default']
     );
 
