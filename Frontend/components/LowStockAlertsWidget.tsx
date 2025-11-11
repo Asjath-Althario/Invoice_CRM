@@ -1,20 +1,35 @@
-
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Package } from 'lucide-react';
-import { getProductsServices } from '../data/mockData';
+// import { getProductsServices } from '../data/mockData';
 import type { ProductOrService } from '../types';
 import eventBus from '../utils/eventBus';
+import { apiService } from '../services/api';
 
 const LowStockAlertsWidget: React.FC = () => {
     const [lowStockItems, setLowStockItems] = useState<ProductOrService[]>([]);
 
-    const refreshData = () => {
-        const products = getProductsServices().filter(p => p.type === 'Product');
-        const alerts = products
-            .filter(p => p.stockLevel !== undefined && p.reorderPoint !== undefined && p.stockLevel <= p.reorderPoint)
-            .sort((a, b) => (a.stockLevel || 0) - (b.stockLevel || 0));
-            
-        setLowStockItems(alerts);
+    const refreshData = async () => {
+        try {
+            const raw = (await apiService.getProductsServices()) as any[];
+            const products = raw
+                .map(p => ({
+                    ...p,
+                    type: p.type || (p.product_type || 'Service'),
+                    stockLevel: p.stockLevel ?? p.stock_quantity ?? p.stock_qty,
+                    reorderPoint: p.reorderPoint ?? p.low_stock_threshold ?? p.reorder_point,
+                    unitPrice: p.unitPrice ?? p.price,
+                }))
+                .filter(p => p.type === 'Product');
+
+            const alerts = products
+                .filter(p => p.stockLevel !== undefined && p.reorderPoint !== undefined && Number(p.stockLevel) <= Number(p.reorderPoint))
+                .sort((a, b) => (Number(a.stockLevel) || 0) - (Number(b.stockLevel) || 0)) as ProductOrService[];
+
+            setLowStockItems(alerts);
+        } catch (e) {
+            console.error('Failed to load products for low stock alerts:', e);
+            setLowStockItems([]);
+        }
     };
 
     useEffect(() => {

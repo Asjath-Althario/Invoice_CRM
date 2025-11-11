@@ -11,8 +11,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body size limits to support large base64 logo uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Auth middleware
 const authMiddleware = require('./middleware/authMiddleware');
@@ -33,6 +34,7 @@ const aiRoutes = require('./routes/ai');
 const purchaseUploadRoutes = require('./routes/purchaseUploads');
 const settingsRoutes = require('./routes/settings');
 const recurringInvoiceRoutes = require('./routes/recurringInvoices');
+const userRoutes = require('./routes/users');
 
 // Public routes
 app.use('/api/auth', authRoutes);
@@ -48,7 +50,8 @@ app.use('/api/petty-cash', authMiddleware, pettyCashRoutes);
 app.use('/api/ai', authMiddleware, aiRoutes);
 app.use('/api/purchase-uploads', authMiddleware, purchaseUploadRoutes);
 app.use('/api/recurring-invoices', authMiddleware, recurringInvoiceRoutes);
-app.use('/api', authMiddleware, settingsRoutes);
+app.use('/api/settings', authMiddleware, settingsRoutes);
+app.use('/api/users', authMiddleware, userRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -58,7 +61,14 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  const status = err.status || err.statusCode || 500;
+  const payload = { message: err.message || 'Something went wrong!' };
+  if (err && (err.code || err.errno || err.sqlMessage)) {
+    payload.code = err.code;
+    payload.errno = err.errno;
+    payload.sqlMessage = err.sqlMessage;
+  }
+  res.status(status).json(payload);
 });
 
 // 404 handler

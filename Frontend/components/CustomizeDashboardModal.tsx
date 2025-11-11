@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { Preferences } from '../types';
 
@@ -20,6 +19,13 @@ const WIDGETS = [
 
 const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = ({ isOpen, onClose, currentPreferences, onSave }) => {
     const [widgets, setWidgets] = useState(currentPreferences);
+
+    // Sync when opening or when prefs change
+    useEffect(() => {
+        if (isOpen) {
+            setWidgets(currentPreferences);
+        }
+    }, [currentPreferences, isOpen]);
 
     if (!isOpen) return null;
 

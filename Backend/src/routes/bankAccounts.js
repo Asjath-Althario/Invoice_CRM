@@ -9,7 +9,18 @@ const router = express.Router();
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const [accounts] = await db.query('SELECT * FROM bank_accounts ORDER BY account_name ASC');
-    res.json(accounts);
+    
+    // Map database field names to frontend expected camelCase
+    const mappedAccounts = accounts.map(account => ({
+      id: account.id,
+      accountName: account.account_name,
+      accountNumber: account.account_number,
+      bankName: account.bank_name,
+      balance: account.balance,
+      type: account.type
+    }));
+    
+    res.json(mappedAccounts);
   } catch (error) {
     console.error('Get bank accounts error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -68,15 +79,35 @@ router.post('/', authMiddleware, async (req, res) => {
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { accountName, accountNumber, bankName, balance, type } = req.body;
+    // Accept both camelCase and snake_case field names for compatibility
+    const {
+      accountName, accountNumber, bankName, balance, type,
+      account_name, account_number, bank_name
+    } = req.body;
+
+    // Use camelCase if available, fallback to snake_case
+    const finalAccountName = accountName || account_name;
+    const finalAccountNumber = accountNumber || account_number;
+    const finalBankName = bankName || bank_name;
 
     await db.query(
       'UPDATE bank_accounts SET account_name = ?, account_number = ?, bank_name = ?, balance = ?, type = ? WHERE id = ?',
-      [accountName, accountNumber, bankName, balance, type, id]
+      [finalAccountName, finalAccountNumber, finalBankName, balance, type, id]
     );
 
     const [account] = await db.query('SELECT * FROM bank_accounts WHERE id = ?', [id]);
-    res.json(account[0]);
+    
+    // Map response to camelCase
+    const mappedAccount = {
+      id: account[0].id,
+      accountName: account[0].account_name,
+      accountNumber: account[0].account_number,
+      bankName: account[0].bank_name,
+      balance: account[0].balance,
+      type: account[0].type
+    };
+    
+    res.json(mappedAccount);
   } catch (error) {
     console.error('Update bank account error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -110,26 +141,77 @@ router.get('/:id/transactions', authMiddleware, async (req, res) => {
 // Add transaction to bank account
 router.post('/:id/transactions', authMiddleware, async (req, res) => {
   try {
+    console.log('=== BANK TRANSACTION API CALLED ===');
+    console.log('Account ID:', req.params.id);
+    console.log('Request body:', req.body);
+    console.log('Headers:', req.headers);
+    
     const { id } = req.params;
-    const { amount, description, date } = req.body;
+    const { amount, description, date, type, action } = req.body;
     const transactionId = uuidv4();
+
+    console.log('Extracted data:', { id, amount, description, date, type, action, transactionId });
 
     // Convert date to proper format if it's an ISO string
     const formattedDate = date ? new Date(date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    console.log('Formatted date:', formattedDate);
 
+    console.log('Inserting bank transaction...');
     await db.query(
-      'INSERT INTO bank_transactions (id, account_id, date, amount, description) VALUES (?, ?, ?, ?, ?)',
-      [transactionId, id, formattedDate, amount, description]
+      'INSERT INTO bank_transactions (id, account_id, date, amount, description, type, action) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [transactionId, id, formattedDate, amount, description, type || null, action || null]
     );
 
     // Update account balance - for payments (credit to business), add to balance
     const balanceChange = parseFloat(amount);
+    console.log('Updating account balance by:', balanceChange);
     await db.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [balanceChange, id]);
 
     const [transaction] = await db.query('SELECT * FROM bank_transactions WHERE id = ?', [transactionId]);
+    console.log('Created transaction:', transaction[0]);
+    console.log('=== BANK TRANSACTION API COMPLETED ===');
+    
     res.status(201).json(transaction[0]);
   } catch (error) {
     console.error('Add bank transaction error:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete transaction from bank account
+router.delete('/:accountId/transactions/:transactionId', authMiddleware, async (req, res) => {
+  try {
+    console.log('=== DELETE BANK TRANSACTION DEBUG ===');
+    const { accountId, transactionId } = req.params;
+    console.log('Account ID:', accountId);
+    console.log('Transaction ID:', transactionId);
+    
+    // First get the transaction to update balance
+    const [transaction] = await db.query('SELECT * FROM bank_transactions WHERE id = ? AND account_id = ?', [transactionId, accountId]);
+    console.log('Found transaction:', transaction);
+    
+    if (transaction.length === 0) {
+      console.log('Transaction not found');
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+    
+    // Delete the transaction
+    console.log('Deleting transaction...');
+    const deleteResult = await db.query('DELETE FROM bank_transactions WHERE id = ?', [transactionId]);
+    console.log('Delete result:', deleteResult);
+    
+    // Update account balance - reverse the transaction
+    const balanceChange = -parseFloat(transaction[0].amount);
+    console.log('Updating balance by:', balanceChange);
+    const balanceResult = await db.query('UPDATE bank_accounts SET balance = balance + ? WHERE id = ?', [balanceChange, accountId]);
+    console.log('Balance update result:', balanceResult);
+    
+    console.log('=== DELETE COMPLETED SUCCESSFULLY ===');
+    res.json({ message: 'Bank transaction deleted successfully' });
+  } catch (error) {
+    console.error('Delete bank transaction error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

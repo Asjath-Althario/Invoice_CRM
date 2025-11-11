@@ -1,73 +1,173 @@
 const express = require('express');
-const authMiddleware = require('../middleware/authMiddleware');
 const db = require('../config/database');
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
 // Get company profile
-router.get('/company-profile', authMiddleware, async (req, res) => {
+router.get('/company-profile', async (req, res) => {
   try {
-    const [profiles] = await db.query('SELECT * FROM company_profile WHERE id = ?', ['default']);
-    if (profiles.length === 0) {
+    console.log('Fetching company profile...');
+    const [rows] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
+
+    if (!rows || rows.length === 0) {
       return res.json({
+        id: 'default',
         name: '',
         address: '',
         email: '',
         phone: '',
-        logoUrl: ''
+        logoUrl: '',
+        website: '',
+        taxId: ''
       });
     }
-    res.json(profiles[0]);
+
+    const profile = rows[0];
+    const response = {
+      id: profile.id,
+      name: profile.company_name || '',
+      address: profile.address || '',
+      email: profile.email || '',
+      phone: profile.phone || '',
+      logoUrl: profile.logo_url || '',
+      website: profile.website || '',
+      taxId: profile.tax_id || ''
+    };
+
+    res.json(response);
   } catch (error) {
-    console.error('Get company profile error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching company profile:', error);
+    if (error && (error.code || error.errno || error.sqlMessage)) {
+      console.error('DB Error details:', { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage });
+    }
+    res.status(500).json({ error: 'Failed to fetch company profile', details: error.message });
   }
 });
 
 // Update company profile
-router.put('/company-profile', authMiddleware, async (req, res) => {
+router.put('/company-profile', async (req, res) => {
   try {
-    const { name, address, email, phone, logoUrl } = req.body;
+    console.log('Update company profile request body received');
+    let { name, address, email, phone, logoUrl, website, taxId } = req.body || {};
+
+    // Ensure a default row exists
+    await db.query("INSERT IGNORE INTO company_profile (id, company_name) VALUES ('default', '')");
+
+    // Validate base64 size if provided
+    if (typeof logoUrl === 'string' && logoUrl.startsWith('data:image/')) {
+      try {
+        const base64 = logoUrl.split(',')[1] || '';
+        const approxBytes = Math.floor((base64.length * 3) / 4); // base64 -> bytes approximation
+        const maxBytes = 2 * 1024 * 1024; // 2MB limit to avoid DB packet issues
+        if (approxBytes > maxBytes) {
+          return res.status(413).json({ message: 'Logo image too large. Please upload an image under 2MB.' });
+        }
+      } catch (sizingErr) {
+        console.warn('Failed to estimate base64 size:', sizingErr);
+      }
+    }
+
+    // If logoUrl is a data URL, save it as a file and store the URL instead of base64
+    if (typeof logoUrl === 'string' && logoUrl.startsWith('data:image/')) {
+      try {
+        const match = logoUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+        if (match) {
+          const mime = match[1];
+          const base64Data = match[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = mime.split('/')[1].replace('jpeg', 'jpg');
+          const uploadsDir = path.join(__dirname, '../uploads');
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          const filename = `company-logo-${Date.now()}.${ext}`;
+          const filePath = path.join(uploadsDir, filename);
+          fs.writeFileSync(filePath, buffer);
+          // Replace with public URL
+          logoUrl = `/uploads/${filename}`;
+        }
+      } catch (fileErr) {
+        console.error('Failed to save logo file:', fileErr);
+        return res.status(500).json({ message: 'Failed to save logo image.' });
+      }
+    }
+
+    // If logoUrl is not a string, ignore it (partial update)
+    if (typeof logoUrl !== 'string') {
+      logoUrl = undefined;
+    }
+
+    // Load existing profile
+    const [existingRows] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
+    const existing = existingRows[0] || {};
+
+    // Merge partial update
+    const next = {
+      company_name: name != null ? name : existing.company_name || '',
+      address: address != null ? address : existing.address || '',
+      email: email != null ? email : existing.email || '',
+      phone: phone != null ? phone : existing.phone || '',
+      logo_url: logoUrl != null ? logoUrl : existing.logo_url || '',
+      website: website != null ? website : existing.website || '',
+      tax_id: taxId != null ? taxId : existing.tax_id || ''
+    };
 
     await db.query(
-      'UPDATE company_profile SET name = ?, address = ?, phone = ?, email = ?, logo_url = ? WHERE id = ?',
-      [name, address, phone, email, logoUrl, 'default']
+      'UPDATE company_profile SET company_name = ?, address = ?, email = ?, phone = ?, logo_url = ?, website = ?, tax_id = ?, updated_at = NOW() WHERE id = ?',
+      [ next.company_name, next.address, next.email, next.phone, next.logo_url, next.website, next.tax_id, 'default' ]
     );
 
-    const [profiles] = await db.query('SELECT * FROM company_profile WHERE id = ?', ['default']);
-    res.json(profiles[0]);
+    const [profiles] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
+    const profile = profiles[0];
+    const response = {
+      id: profile.id,
+      name: profile.company_name || '',
+      address: profile.address || '',
+      email: profile.email || '',
+      phone: profile.phone || '',
+      logoUrl: profile.logo_url || '',
+      website: profile.website || '',
+      taxId: profile.tax_id || ''
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Update company profile error:', error);
-    res.status(500).json({ message: 'Server error' });
+    // Log MySQL details if present
+    if (error && (error.code || error.errno || error.sqlMessage)) {
+      console.error('DB Error details:', { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
 // Get user preferences
-router.get('/preferences', authMiddleware, async (req, res) => {
+router.get('/preferences', async (req, res) => {
   try {
     const userId = req.user.id;
-    const [preferences] = await db.query('SELECT preferences FROM user_preferences WHERE user_id = ?', [userId]);
+    const [preferencesRows] = await db.query('SELECT id, preferences FROM user_preferences WHERE user_id = ?', [userId]);
 
-    if (preferences.length === 0) {
-      // Return default preferences
-      return res.json({
-        theme: 'Light',
-        dateFormat: 'YYYY-MM-DD',
-        defaultCurrency: 'AED',
-        defaultTaxRate: 10,
-        notifications: {
-          weeklySummary: true,
-          invoicePaid: true,
-          quoteAccepted: false,
-        },
-        dashboardWidgets: {
-          salesOverview: true,
-          recentActivity: true,
-          upcomingInvoices: false,
-          lowStockAlerts: false,
-          recentPurchases: false,
-        },
-        whatsappMessageTemplate: `Hi [CustomerName], 👋
+    const defaultPrefs = {
+      theme: 'Light',
+      dateFormat: 'YYYY-MM-DD',
+      defaultCurrency: 'AED',
+      defaultTaxRate: 10,
+      notifications: {
+        weeklySummary: true,
+        invoicePaid: true,
+        quoteAccepted: false,
+      },
+      dashboardWidgets: {
+        salesOverview: true,
+        recentActivity: true,
+        upcomingInvoices: false,
+        lowStockAlerts: false,
+        recentPurchases: false,
+      },
+      whatsappMessageTemplate: `Hi [CustomerName], 👋
 Hope you're doing well!
 
 Please find attached your Invoice #[InvoiceNumber] with a total amount of [TotalAmount].
@@ -80,11 +180,27 @@ Thank you for your continued support and trust in us! 💙
 
 Best regards,
 [Your Name / Company Name]
-📞 [Contact Number] | 💬 WhatsApp Support`
-      });
+📞 [Contact Number] | 💬 WhatsApp Support`,
+      invoiceTerms: `Payment due within 30 days unless otherwise agreed.
+Late payments may incur a 1.5% monthly service charge.
+Quote the invoice number on all correspondence and payments.
+Goods/services remain property of the supplier until fully paid.
+Report discrepancies within 7 days of receipt.`
+    };
+
+    if (!preferencesRows || preferencesRows.length === 0 || preferencesRows[0].preferences == null) {
+      return res.json(defaultPrefs);
     }
 
-    res.json(JSON.parse(preferences[0].preferences));
+    const raw = preferencesRows[0].preferences;
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return res.json({ ...defaultPrefs, ...parsed });
+    } catch (parseErr) {
+      console.error('Preferences JSON parse error:', parseErr);
+      console.error('Raw preferences value:', raw);
+      return res.json(defaultPrefs);
+    }
   } catch (error) {
     console.error('Get preferences error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -92,20 +208,41 @@ Best regards,
 });
 
 // Update user preferences
-router.put('/preferences', authMiddleware, async (req, res) => {
+router.put('/preferences', async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'Authentication error: User not found on request.' });
+    }
     const userId = req.user.id;
-    const preferences = JSON.stringify(req.body);
+    const incoming = req.body || {};
 
+    // Load existing to merge
+    const [existingRows] = await db.query('SELECT preferences FROM user_preferences WHERE user_id = ?', [userId]);
+    let existingPrefs = {};
+    if (existingRows.length && existingRows[0].preferences) {
+      try { existingPrefs = typeof existingRows[0].preferences === 'string' ? JSON.parse(existingRows[0].preferences) : existingRows[0].preferences; } catch {}
+    }
+
+    const merged = { ...existingPrefs, ...incoming };
+    const preferences = JSON.stringify(merged);
+
+    console.log('Updating preferences for user:', userId);
+
+    const [userRows] = await db.query('SELECT id FROM users WHERE id = ?', [userId]);
+    if (!userRows || userRows.length === 0) {
+      return res.status(400).json({ message: 'User not found' });
+    }
+
+    const id = uuidv4();
     await db.query(
-      'INSERT INTO user_preferences (user_id, preferences, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE preferences = ?, updated_at = NOW()',
-      [userId, preferences, preferences]
+      'INSERT INTO user_preferences (id, user_id, preferences, updated_at) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE preferences = VALUES(preferences), updated_at = NOW()',
+      [id, userId, preferences]
     );
 
-    res.json(req.body);
+    res.json(merged);
   } catch (error) {
     console.error('Update preferences error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

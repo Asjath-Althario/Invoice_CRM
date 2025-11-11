@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, XCircle } from 'lucide-react';
+import { X, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { PettyCashTransaction, BankAccount } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
@@ -75,10 +75,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ onClose, onSave, ba
                     </div>
 
                     {formData.type === 'Funding' && (
-                         <div>
+                        <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Fund from Account</label>
-                            <select name="fundingAccountId" value={fundingAccountId} onChange={e => setFundingAccountId(e.target.value)} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white" required>
-                                {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.accountName}</option>)}
+                            <select 
+                                name="fundingAccountId" 
+                                value={fundingAccountId} 
+                                onChange={e => setFundingAccountId(e.target.value)} 
+                                className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white" 
+                                required
+                            >
+                                <option value="">Select funding account...</option>
+                                {bankAccounts.map(acc => (
+                                    <option key={acc.id} value={acc.id}>
+                                        {acc.accountName} ({formatCurrency(acc.balance || 0)})
+                                    </option>
+                                ))}
                             </select>
                         </div>
                     )}
@@ -99,9 +110,11 @@ const PettyCash: React.FC = () => {
     const [pettyCashAccount, setPettyCashAccount] = useState<BankAccount | null>(null);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const refreshData = async () => {
         try {
+            setIsLoading(true);
             const [allAccounts, transactionsData] = await Promise.all([
                 apiService.getBankAccounts(),
                 apiService.getPettyCashTransactions()
@@ -112,11 +125,130 @@ const PettyCash: React.FC = () => {
             setTransactions(transactionsData);
         } catch (error) {
             console.error('Failed to fetch petty cash data:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveTransaction = async (transaction: Omit<PettyCashTransaction, 'id' | 'status'>, fundingAccountId?: string) => {
+        try {
+            // Create the petty cash transaction
+            const pettyCashTx = {
+                ...transaction,
+                status: transaction.type === 'Funding' ? 'Approved' : 'Pending', // Auto-approve funding
+            };
+            await apiService.createPettyCashTransaction(pettyCashTx);
+
+            // If it's funding, create corresponding bank transactions
+            if (transaction.type === 'Funding' && fundingAccountId && pettyCashAccount) {
+                // Create withdrawal from funding source account
+                await apiService.addBankTransaction(fundingAccountId, {
+                    date: transaction.date,
+                    description: `Petty Cash Funding - ${transaction.description}`,
+                    amount: -transaction.amount, // Negative for withdrawal
+                    type: 'debit',
+                    action: 'Fund Transfer to Petty Cash'
+                });
+
+                // Create deposit to petty cash account
+                await apiService.addBankTransaction(pettyCashAccount.id, {
+                    date: transaction.date,
+                    description: `Funding from ${bankAccounts.find(acc => acc.id === fundingAccountId)?.accountName || 'Bank'} - ${transaction.description}`,
+                    amount: transaction.amount, // Positive for deposit
+                    type: 'credit',
+                    action: 'Receive Funding from Bank Account'
+                });
+            }
+            
+            setIsModalOpen(false);
+            refreshData();
+        } catch (error) {
+            console.error('Failed to save petty cash transaction:', error);
+            alert('Failed to save transaction. Please try again.');
+        }
+    };
+
+    const handleApprove = async (transaction: PettyCashTransaction) => {
+        try {
+            console.log('Approving transaction:', transaction);
+            
+            // Step 1: Update petty cash transaction status
+            await apiService.updatePettyCashTransaction(transaction.id, { 
+                ...transaction, 
+                status: 'Approved' 
+            });
+            console.log('Petty cash transaction updated successfully');
+
+            // Step 2: Create bank transaction for approved petty cash transactions
+            if (!pettyCashAccount) {
+                console.error('Petty cash account not found!');
+                alert('Error: Petty cash account not found. Please refresh the page and try again.');
+                return;
+            }
+
+            console.log('Petty cash account found:', pettyCashAccount.id);
+            
+            if (transaction.type === 'Expense' || transaction.type === 'Reimbursement') {
+                console.log('Creating debit bank transaction for expense/reimbursement');
+                // Create a debit transaction (negative amount for expense/reimbursement)
+                const bankTxResult = await apiService.addBankTransaction(pettyCashAccount.id, {
+                    date: transaction.date,
+                    description: transaction.description,
+                    amount: -transaction.amount, // Negative for expense/reimbursement
+                    type: 'debit',
+                    action: transaction.type === 'Expense' ? 'Petty Cash Expense' : 'Employee Reimbursement'
+                });
+                console.log('Bank transaction created:', bankTxResult);
+            } else if (transaction.type === 'Funding') {
+                console.log('Creating credit bank transaction for funding');
+                console.log('Transaction amount:', transaction.amount, 'Type:', typeof transaction.amount);
+                
+                // Ensure amount is a number
+                const amount = typeof transaction.amount === 'string' ? parseFloat(transaction.amount) : transaction.amount;
+                console.log('Parsed amount:', amount);
+                
+                // Create a credit transaction (positive amount for funding)
+                const bankTxResult = await apiService.addBankTransaction(pettyCashAccount.id, {
+                    date: transaction.date,
+                    description: transaction.description,
+                    amount: amount, // Positive for funding
+                    type: 'credit',
+                    action: 'Receive Funding from Bank Account'
+                });
+                console.log('Bank transaction created:', bankTxResult);
+            }
+
+            console.log('Refreshing data...');
+            refreshData();
+            console.log('Transaction approval completed successfully');
+        } catch (error) {
+            console.error('Failed to approve transaction:', error);
+            console.error('Error details:', error.response?.data || error.message);
+            alert(`Failed to approve transaction: ${error.response?.data?.message || error.message}`);
+        }
+    };
+
+    const handleReject = async (transaction: PettyCashTransaction) => {
+        if (window.confirm('Are you sure you want to reject this transaction? This action cannot be undone.')) {
+            try {
+                await apiService.updatePettyCashTransaction(transaction.id, { 
+                    ...transaction, 
+                    status: 'Rejected' 
+                });
+                refreshData();
+            } catch (error) {
+                console.error('Failed to reject transaction:', error);
+                alert('Failed to reject transaction. Please try again.');
+            }
         }
     };
 
     useEffect(() => {
-        refreshData();
+        const initializeData = async () => {
+            await refreshData();
+        };
+        
+        initializeData();
         const dataSub = eventBus.on('dataChanged', refreshData);
         const modalSub = eventBus.on('openNewPettyCashModal', () => setIsModalOpen(true));
         return () => {
@@ -125,43 +257,21 @@ const PettyCash: React.FC = () => {
         };
     }, []);
 
-    const handleSaveTransaction = async (transaction: Omit<PettyCashTransaction, 'id' | 'status'>, fundingAccountId?: string) => {
-        try {
-            await apiService.createPettyCashTransaction({
-                ...transaction,
-                status: transaction.type === 'Funding' ? 'Approved' : 'Pending', // Auto-approve funding
-            });
-            setIsModalOpen(false);
-            refreshData();
-        } catch (error) {
-            console.error('Failed to save petty cash transaction:', error);
-        }
-    };
-
-    const handleApprove = async (transaction: PettyCashTransaction) => {
-        try {
-            await apiService.updatePettyCashTransaction(transaction.id, { ...transaction, status: 'Approved' });
-            refreshData();
-        } catch (error) {
-            console.error('Failed to approve transaction:', error);
-        }
-    };
-
-    const handleReject = async (transaction: PettyCashTransaction) => {
-        if (window.confirm('Are you sure you want to reject this transaction? This action cannot be undone.')) {
-            try {
-                await apiService.updatePettyCashTransaction(transaction.id, { ...transaction, status: 'Rejected' });
-                refreshData();
-            } catch (error) {
-                console.error('Failed to reject transaction:', error);
-            }
-        }
-    };
-
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold dark:text-white">Petty Cash Ledger</h2>
+                <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-semibold dark:text-white">Petty Cash Ledger</h2>
+                    <button
+                        onClick={refreshData}
+                        disabled={isLoading}
+                        className="flex items-center gap-2 px-3 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 transition-colors"
+                        title="Refresh data"
+                    >
+                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                        {isLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                </div>
                 <div className="text-right">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Current Balance</p>
                     <p className="text-2xl font-bold font-mono dark:text-white">{formatCurrency(pettyCashAccount?.balance || 0)}</p>

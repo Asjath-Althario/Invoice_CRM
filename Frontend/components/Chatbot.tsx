@@ -28,12 +28,16 @@ const Chatbot: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const response = await apiService.chat(userInput, messages);
-            const modelMessage = { role: 'model' as const, text: response };
+            const resp: any = await apiService.chat(userInput, messages);
+            const text = typeof resp === 'string' ? resp : (resp?.response || resp?.message || 'No response');
+            const modelMessage = { role: 'model' as const, text };
             setMessages(prev => [...prev, modelMessage]);
-        } catch (error) {
-            console.error("Error sending message to backend:", error);
-            const errorMessage = { role: 'model' as const, text: 'Sorry, I encountered an error. Please try again.' };
+        } catch (error: any) {
+            console.error('Error sending message to backend:', error);
+            const errorText = (typeof error?.message === 'string' && error.message.includes('AI is not configured'))
+                ? 'AI is not configured on the server. Please set GEMINI_API_KEY.'
+                : 'Sorry, I encountered an error. Please try again.';
+            const errorMessage = { role: 'model' as const, text: errorText };
             setMessages(prev => [...prev, errorMessage]);
         } finally {
             setIsLoading(false);

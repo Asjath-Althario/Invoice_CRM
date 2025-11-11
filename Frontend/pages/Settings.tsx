@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Building, Users, Sliders, Zap, Save, Plus, X, Edit, Trash2, UploadCloud } from 'lucide-react';
 import { apiService } from '../services/api';
@@ -94,6 +93,7 @@ const Settings: React.FC = () => {
     };
 
     useEffect(() => {
+        refreshData(); // Load data on component mount
         const unsubscribe = eventBus.on('dataChanged', refreshData);
         return () => unsubscribe();
     }, []);
@@ -105,6 +105,10 @@ const Settings: React.FC = () => {
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            if (file.size > 1 * 1024 * 1024) { // 1MB size limit
+                alert('Logo image is too large. Please select an image smaller than 1MB.');
+                return;
+            }
             const reader = new FileReader();
             reader.onloadend = () => {
                 setLogoPreview(reader.result as string);
@@ -180,8 +184,11 @@ const Settings: React.FC = () => {
      const handlePreferencesSave = async () => {
        if (preferences) {
            try {
-               await apiService.updatePreferences(preferences);
-               applyTheme();
+               const updated = await apiService.updatePreferences(preferences);
+               // Persist state and apply theme immediately
+               const updatedPrefs = updated as Preferences;
+               setPreferences(updatedPrefs);
+               applyTheme(updatedPrefs.theme as 'Light' | 'Dark');
                alert('Preferences updated!');
            } catch (error) {
                console.error('Failed to update preferences:', error);
@@ -225,7 +232,7 @@ const Settings: React.FC = () => {
                                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                             <UploadCloud size={24} className="text-gray-500 dark:text-gray-400 mb-2"/>
                                             <p className="mb-2 text-sm text-gray-500 dark:text-gray-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, GIF (MAX. 2MB)</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, GIF (MAX. 1MB)</p>
                                         </div>
                                         <input id="logo-upload" type="file" className="hidden" accept="image/*" onChange={handleLogoChange}/>
                                     </label>
@@ -240,6 +247,14 @@ const Settings: React.FC = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Company Name</label>
                                     <input type="text" name="name" value={companyProfile?.name || ''} onChange={handleProfileChange} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-primary focus:border-primary"/>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Website</label>
+                                    <input type="url" name="website" value={companyProfile?.website || ''} onChange={handleProfileChange} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-primary focus:border-primary"/>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tax ID</label>
+                                    <input type="text" name="taxId" value={companyProfile?.taxId || ''} onChange={handleProfileChange} className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-primary focus:border-primary"/>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
@@ -338,6 +353,30 @@ const Settings: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Financial Settings Section */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
+                            <div className="p-6">
+                                <h3 className="text-lg font-semibold dark:text-gray-200">Financial Settings</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Configure accounting defaults.</p>
+                            </div>
+                            <div className="border-t dark:border-gray-700 p-6 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Default VAT / Tax Rate (%)</label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={0.5}
+                                      name="defaultTaxRate"
+                                      value={preferences.defaultTaxRate}
+                                      onChange={handlePreferencesChange}
+                                      className="mt-1 block w-full max-w-xs bg-white dark:bg-gray-700 dark:border-gray-600 rounded-md px-3 py-2 border border-gray-300 focus:ring-primary focus:border-primary"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Used for automatic tax calculations on invoices, quotes, purchases & recurring invoices.</p>
+                            </div>
+                        </div>
+
                          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
                              <h3 className="text-lg font-semibold dark:text-gray-200">Communication</h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400">Manage your communication templates and notifications.</p>
@@ -346,6 +385,11 @@ const Settings: React.FC = () => {
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">WhatsApp Message Template</label>
                                     <textarea name="whatsappMessageTemplate" value={preferences.whatsappMessageTemplate || ''} onChange={handlePreferencesChange} rows={6} className="mt-1 block w-full bg-white dark:bg-gray-700 dark:border-gray-600 rounded-md border border-gray-300 shadow-sm sm:text-sm focus:ring-primary focus:border-primary"/>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Placeholders: [CustomerName], [InvoiceNumber], [TotalAmount], [Your Name / Company Name], [Contact Number]</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Invoice Terms & Conditions</label>
+                                    <textarea name="invoiceTerms" value={preferences.invoiceTerms || ''} onChange={handlePreferencesChange} rows={6} className="mt-1 block w-full bg-white dark:bg-gray-700 dark:border-gray-600 rounded-md border border-gray-300 shadow-sm sm:text-sm focus:ring-primary focus:border-primary" placeholder={"Enter default terms shown on printed invoices"}/>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Will appear under "Terms & Conditions" on printed invoices.</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email Notifications</label>

@@ -8,7 +8,12 @@ const router = express.Router();
 // Get all purchases
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const [purchases] = await db.query('SELECT * FROM purchases ORDER BY date DESC');
+    const [purchases] = await db.query(`
+      SELECT p.*, c.name AS supplier_name
+      FROM purchases p
+      LEFT JOIN contacts c ON p.supplier_id = c.id
+      ORDER BY p.date DESC
+    `);
     res.json(purchases);
   } catch (error) {
     console.error('Get purchases error:', error);
@@ -20,7 +25,12 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [id]);
+    const [purchase] = await db.query(`
+      SELECT p.*, c.name AS supplier_name
+      FROM purchases p
+      LEFT JOIN contacts c ON p.supplier_id = c.id
+      WHERE p.id = ?
+    `, [id]);
     if (purchase.length === 0) {
       return res.status(404).json({ message: 'Purchase not found' });
     }
@@ -42,7 +52,12 @@ router.post('/', authMiddleware, async (req, res) => {
       [purchaseId, supplier_id, date, due_date, purchase_order_number, subtotal, vat, total, status || 'Draft', purchase_type || 'Credit', currency || 'AED', file_path]
     );
 
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [purchaseId]);
+    const [purchase] = await db.query(`
+      SELECT p.*, c.name AS supplier_name
+      FROM purchases p
+      LEFT JOIN contacts c ON p.supplier_id = c.id
+      WHERE p.id = ?
+    `, [purchaseId]);
     res.status(201).json(purchase[0]);
   } catch (error) {
     console.error('Create purchase error:', error);
@@ -87,7 +102,12 @@ router.put('/:id', authMiddleware, async (req, res) => {
     updateValues.push(id);
     await db.query(updateQuery, updateValues);
 
-    const [purchase] = await db.query('SELECT * FROM purchases WHERE id = ?', [id]);
+    const [purchase] = await db.query(`
+      SELECT p.*, c.name AS supplier_name
+      FROM purchases p
+      LEFT JOIN contacts c ON p.supplier_id = c.id
+      WHERE p.id = ?
+    `, [id]);
     res.json(purchase[0]);
   } catch (error) {
     console.error('Update purchase error:', error);

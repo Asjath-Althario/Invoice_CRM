@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DollarSign, Users, Activity, FileText, Settings } from 'lucide-react';
 import { formatCurrency } from '../utils/formatting';
@@ -23,7 +22,12 @@ const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: s
 );
 
 const SalesChart = ({ salesData }: { salesData: { name: string, sales: number }[] }) => {
-    const maxSales = Math.max(...salesData.map(d => d.sales), 1); // Avoid division by zero
+    // Sanitize data to avoid NaN in SVG attributes
+    const safeData = salesData.map(d => ({
+        name: d.name,
+        sales: Number.isFinite(Number(d.sales)) ? Number(d.sales) : 0,
+    }));
+    const maxSales = Math.max(1, ...safeData.map(d => d.sales)); // Avoid division by zero and NaN
     const chartHeight = 200;
     const barWidth = 30;
     const gap = 20;
@@ -33,8 +37,8 @@ const SalesChart = ({ salesData }: { salesData: { name: string, sales: number }[
             <h2 className="text-xl font-semibold mb-4 dark:text-white">Sales Overview (Last 6 Months)</h2>
             <svg width="100%" height={chartHeight + 40} aria-label="Sales chart showing last 6 months">
                 <g transform="translate(0, 10)">
-                    {salesData.map((data, i) => {
-                        const barHeight = (data.sales / maxSales) * chartHeight;
+                    {safeData.map((data, i) => {
+                        const barHeight = Math.max(0, (data.sales / maxSales) * chartHeight);
                         return (
                             <g key={data.name} transform={`translate(${(barWidth + gap) * i}, 0)`}>
                                 <rect
@@ -108,18 +112,31 @@ const Dashboard: React.FC = () => {
                 apiService.getPreferences()
             ]);
 
-            const invoices = invoicesData as any[];
-            const contacts = contactsData as any[];
+            const invoices = (invoicesData as any[]) || [];
+            const contacts = (contactsData as any[]) || [];
 
-            const totalRevenue = invoices.filter(inv => inv.status === 'Paid').reduce((sum, inv) => sum + (inv.total_amount || inv.total), 0);
-            const totalCustomers = contacts.filter(c => c.type === 'Customer').length;
-            const pendingAmount = invoices.filter(inv => inv.status !== 'Paid').reduce((sum, inv) => sum + (inv.total_amount || inv.total), 0);
+            const toNumber = (v: any) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : 0;
+            };
+
+            const totalRevenue = invoices
+                .filter(inv => inv.status === 'Paid')
+                .reduce((sum, inv) => sum + toNumber(inv.total_amount ?? inv.total), 0);
+            const totalCustomers = contacts.filter((c: any) => c.type === 'Customer').length;
+            const pendingAmount = invoices
+                .filter(inv => inv.status !== 'Paid')
+                .reduce((sum, inv) => sum + toNumber(inv.total_amount ?? inv.total), 0);
 
             const now = new Date();
             const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const salesThisMonth = invoices
-                .filter(inv => new Date(inv.issue_date || inv.issueDate) >= firstDayOfMonth)
-                .reduce((sum, inv) => sum + (inv.total_amount || inv.total), 0);
+                .filter(inv => {
+                    const dateStr = inv.issue_date ?? inv.issueDate;
+                    const d = new Date(dateStr);
+                    return Number.isFinite(d.getTime()) && d >= firstDayOfMonth;
+                })
+                .reduce((sum, inv) => sum + toNumber(inv.total_amount ?? inv.total), 0);
 
             setStats({ totalRevenue, totalCustomers, pendingAmount, salesThisMonth });
 
@@ -136,15 +153,19 @@ const Dashboard: React.FC = () => {
             }
 
             invoices.filter(inv => inv.status === 'Paid').forEach(inv => {
-                const d = new Date(inv.issue_date || inv.issueDate);
+                const dateStr = inv.issue_date ?? inv.issueDate;
+                const d = new Date(dateStr);
+                if (!Number.isFinite(d.getTime())) return; // skip invalid dates
                 const monthKey = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-                if(monthlySales.hasOwnProperty(monthKey)) {
-                    monthlySales[monthKey] += (inv.total_amount || inv.total);
+                if (Object.prototype.hasOwnProperty.call(monthlySales, monthKey)) {
+                    monthlySales[monthKey] += toNumber(inv.total_amount ?? inv.total);
                 }
             });
 
-            setSalesChartData(Object.entries(monthlySales).map(([name, sales]) => ({ name: name.split(' ')[0], sales })));
-            setPreferences(prefs);
+            const chartData = Object.entries(monthlySales)
+                .map(([name, sales]) => ({ name: name.split(' ')[0], sales: toNumber(sales) }));
+            setSalesChartData(chartData);
+            setPreferences(prefs as Preferences);
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
         }
@@ -159,8 +180,10 @@ const Dashboard: React.FC = () => {
     const handleSavePreferences = async (newDashboardWidgets: Preferences['dashboardWidgets']) => {
         if (preferences) {
             try {
-                await apiService.updatePreferences({ ...preferences, dashboardWidgets: newDashboardWidgets });
-                setPreferences({ ...preferences, dashboardWidgets: newDashboardWidgets });
+                const updated = await apiService.updatePreferences({ ...preferences, dashboardWidgets: newDashboardWidgets });
+                setPreferences(updated as Preferences);
+                try { localStorage.setItem('zenith-preferences', JSON.stringify(updated)); } catch {}
+                eventBus.emit('dataChanged');
             } catch (error) {
                 console.error('Failed to update preferences:', error);
                 alert('Failed to update preferences. Please try again.');

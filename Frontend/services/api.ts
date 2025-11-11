@@ -269,11 +269,11 @@ class ApiService {
 
   // Settings
   async getCompanyProfile() {
-    return this.request('/company-profile');
+    return this.request('/settings/company-profile');
   }
 
   async updateCompanyProfile(profile: any) {
-    return this.request('/company-profile', {
+    return this.request('/settings/company-profile', {
       method: 'PUT',
       body: JSON.stringify(profile),
     });
@@ -284,14 +284,18 @@ class ApiService {
   }
 
   async getPreferences() {
-    return this.request('/preferences');
+    const prefs = await this.request('/settings/preferences');
+    try { localStorage.setItem('zenith-preferences', JSON.stringify(prefs)); } catch {}
+    return prefs;
   }
 
   async updatePreferences(prefs: any) {
-    return this.request('/preferences', {
+    const updated = await this.request('/settings/preferences', {
       method: 'PUT',
       body: JSON.stringify(prefs),
     });
+    try { localStorage.setItem('zenith-preferences', JSON.stringify(updated)); } catch {}
+    return updated;
   }
 
   // AI Services

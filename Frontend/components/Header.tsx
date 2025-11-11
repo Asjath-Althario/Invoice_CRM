@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 // FIX: Imported the 'Settings' icon from lucide-react.
 import { Menu, X, Bell, Sun, Moon, User, DollarSign, FileText, AlertTriangle, MessageSquare, LogOut, ChevronDown, Settings } from 'lucide-react';
-import { getPreferences, updatePreferences, getNotifications, markAllNotificationsAsRead } from '../data/mockData';
+// import { getNotifications, markAllNotificationsAsRead } from '../data/mockData';
 import type { Notification } from '../types';
 import { applyTheme } from '../utils/theme';
 import eventBus from '../utils/eventBus';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/api';
 
 interface HeaderProps {
   sidebarOpen: boolean;
@@ -24,7 +25,14 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
 
 const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const { user, logout } = useAuth();
-  const [theme, setTheme] = useState(getPreferences().theme);
+  const [theme, setTheme] = useState<'Light' | 'Dark'>(() => {
+    try {
+      const raw = localStorage.getItem('zenith-preferences');
+      return raw ? (JSON.parse(raw).theme || 'Light') : 'Light';
+    } catch {
+      return 'Light';
+    }
+  });
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [isProfileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -32,7 +40,8 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const profileRef = useRef<HTMLDivElement>(null);
 
   const refreshNotifications = () => {
-      setNotifications(getNotifications());
+      // TODO: Replace with real backend notifications when available
+      setNotifications([]);
   };
 
   useEffect(() => {
@@ -54,19 +63,25 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'Light' ? 'Dark' : 'Light';
-    const currentPrefs = getPreferences();
-    updatePreferences({ ...currentPrefs, theme: newTheme });
-    applyTheme();
-    setTheme(newTheme);
-    eventBus.emit('themeChanged');
+  const toggleTheme = async () => {
+    const newTheme: 'Light' | 'Dark' = theme === 'Light' ? 'Dark' : 'Light';
+    try {
+      const currentPrefs = (() => { try { return JSON.parse(localStorage.getItem('zenith-preferences') || '{}'); } catch { return {}; }})();
+      const updated = await apiService.updatePreferences({ ...currentPrefs, theme: newTheme });
+      try { localStorage.setItem('zenith-preferences', JSON.stringify(updated)); } catch {}
+      applyTheme(newTheme);
+      setTheme(newTheme);
+      eventBus.emit('themeChanged');
+    } catch (e) {
+      console.error('Failed to toggle theme via API:', e);
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleMarkAllRead = () => {
-      markAllNotificationsAsRead();
+      // Placeholder: no-op until real notifications exist
+      setNotifications((prev) => prev.map(n => ({ ...n, read: true })));
   };
 
   return (

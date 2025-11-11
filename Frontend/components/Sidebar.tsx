@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, FileText, Calculator, BarChart3, Users, Landmark, Settings, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
-import { getCompanyProfile } from '../data/mockData';
 import type { CompanyProfile } from '../types';
 import eventBus from '../utils/eventBus';
+import { apiService } from '../services/api';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -56,12 +56,20 @@ const navItems = [
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setOpen }) => {
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(getCompanyProfile());
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({ name: '', address: '', email: '', phone: '', logoUrl: '' });
   const location = useLocation();
   const [openSubmenus, setOpenSubmenus] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
-    const refreshProfile = () => setCompanyProfile(getCompanyProfile());
+    const refreshProfile = async () => {
+      try {
+        const profile = await apiService.getCompanyProfile();
+        setCompanyProfile(profile as CompanyProfile);
+      } catch (e) {
+        console.error('Failed to load company profile:', e);
+      }
+    };
+    refreshProfile();
     const unsubscribe = eventBus.on('dataChanged', refreshProfile);
     return () => unsubscribe();
   }, []);

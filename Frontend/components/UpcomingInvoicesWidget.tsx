@@ -1,27 +1,50 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar } from 'lucide-react';
-import { getInvoices } from '../data/mockData';
 import type { Invoice } from '../types';
 import { formatCurrency } from '../utils/formatting';
 import eventBus from '../utils/eventBus';
+import { apiService } from '../services/api';
 
 const UpcomingInvoicesWidget: React.FC = () => {
     const [upcoming, setUpcoming] = useState<Invoice[]>([]);
 
-    const refreshData = () => {
-        const invoices = getInvoices();
-        const today = new Date();
-        const next30Days = new Date();
-        next30Days.setDate(today.getDate() + 30);
+    const refreshData = async () => {
+        try {
+            const invoices: any[] = await apiService.getInvoices();
+            const today = new Date();
+            const next30Days = new Date();
+            next30Days.setDate(today.getDate() + 30);
 
-        const upcomingInvoices = invoices
-            .filter(inv => inv.status !== 'Paid' && new Date(inv.dueDate) >= today && new Date(inv.dueDate) <= next30Days)
-            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-            .slice(0, 5);
-        
-        setUpcoming(upcomingInvoices);
+            const parseDate = (inv: any) => {
+                const d = new Date(inv.dueDate || inv.due_date);
+                return Number.isFinite(d.getTime()) ? d : null;
+            };
+
+            const toNumber = (v: any) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : 0;
+            };
+
+            const upcomingInvoices = invoices
+                .filter(inv => inv.status !== 'Paid')
+                .map(inv => ({
+                    ...inv,
+                    dueDate: inv.dueDate || inv.due_date, // ensure camelCase for UI
+                    total: toNumber(inv.total ?? inv.total_amount),
+                }))
+                .filter(inv => {
+                    const d = parseDate(inv);
+                    return d && d >= today && d <= next30Days;
+                })
+                .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                .slice(0, 5) as Invoice[];
+            
+            setUpcoming(upcomingInvoices);
+        } catch (e) {
+            console.error('Failed to load upcoming invoices:', e);
+            setUpcoming([]);
+        }
     };
 
     useEffect(() => {
@@ -38,7 +61,7 @@ const UpcomingInvoicesWidget: React.FC = () => {
                     {upcoming.map(invoice => (
                         <li key={invoice.id} className="flex items-center justify-between">
                             <div>
-                                <Link to={`/sales/invoice/${invoice.id}`} className="font-medium text-primary hover:underline">{invoice.contact.name}</Link>
+                                <Link to={`/sales/invoice/${invoice.id}`} className="font-medium text-primary hover:underline">{invoice.contact?.name || 'Customer'}</Link>
                                 <p className="text-xs text-gray-500 dark:text-gray-400">Due: {invoice.dueDate}</p>
                             </div>
                             <span className="font-mono font-semibold text-sm dark:text-gray-200">{formatCurrency(invoice.total)}</span>

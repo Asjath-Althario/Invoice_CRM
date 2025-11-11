@@ -1,20 +1,37 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart } from 'lucide-react';
-import { getPurchases } from '../data/mockData';
 import type { Purchase } from '../types';
 import { formatCurrency } from '../utils/formatting';
 import eventBus from '../utils/eventBus';
+import { apiService } from '../services/api';
 
 const RecentPurchaseOrdersWidget: React.FC = () => {
     const [recentPurchases, setRecentPurchases] = useState<Purchase[]>([]);
 
-    const refreshData = () => {
-        const purchases = getPurchases()
+    const refreshData = async () => {
+        try {
+            const raw = (await apiService.getPurchases()) as any[];
+            const purchases = raw.map(p => ({
+                ...p,
+                date: p.date || p.purchase_date,
+                purchaseOrderNumber: p.purchase_order_number || p.purchaseOrderNumber,
+                total: p.total ?? p.total_amount ?? 0,
+                status: p.status || 'Draft',
+                purchaseType: p.purchase_type || p.purchaseType || 'Credit',
+                currency: p.currency || 'AED',
+                vendor: p.vendor || p.supplier_name || p.supplier || 'Vendor',
+                lineItems: p.lineItems || [],
+                subtotal: p.subtotal ?? 0,
+                vat: p.vat ?? p.tax ?? 0,
+            }))
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 5);
-        setRecentPurchases(purchases);
+            .slice(0, 5) as Purchase[];
+            setRecentPurchases(purchases);
+        } catch (e) {
+            console.error('Failed to load recent purchases:', e);
+            setRecentPurchases([]);
+        }
     };
 
     useEffect(() => {

@@ -17,7 +17,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      // Navigation is already handled in the login function
     } catch (err: any) {
       setError(err.message || 'Failed to login');
     } finally {

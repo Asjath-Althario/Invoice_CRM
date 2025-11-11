@@ -157,6 +157,7 @@ export interface Preferences {
     recentPurchases: boolean;
   };
   whatsappMessageTemplate?: string;
+  invoiceTerms?: string;
 }
 
 export interface Integration {

@@ -393,7 +393,7 @@ const InvoiceDetail: React.FC = () => {
                         </div>
                         <div className="p-8 overflow-y-auto flex-grow">
                              <div className="mx-auto bg-white shadow-lg">
-                                {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} />}
+                                {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} preferences={preferences} />}
                              </div>
                         </div>
                         <div className="p-4 border-t dark:border-gray-700 flex justify-end space-x-3 flex-shrink-0 bg-white dark:bg-gray-800 rounded-b-lg">
@@ -407,7 +407,7 @@ const InvoiceDetail: React.FC = () => {
             )}
 
             <div id="printable-invoice" className="hidden print:block">
-                {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} />}
+                {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} preferences={preferences} />}
             </div>
         </>
     );

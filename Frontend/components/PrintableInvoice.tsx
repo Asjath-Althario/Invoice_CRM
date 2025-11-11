@@ -1,14 +1,15 @@
 import React from 'react';
-import type { Invoice, CompanyProfile } from '../types';
+import type { Invoice, CompanyProfile, Preferences } from '../types';
 import { formatCurrency } from '../utils/formatting';
 
 interface PrintableInvoiceProps {
   invoice: Partial<Invoice>;
   companyProfile: CompanyProfile;
   taxRate: number;
+  preferences?: Preferences;
 }
 
-const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyProfile, taxRate }) => {
+const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyProfile, taxRate, preferences }) => {
   if (!invoice || !invoice.contact || !invoice.items) {
     return null;
   }
@@ -23,7 +24,6 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyPro
     tax = 0,
     total = 0,
     comments,
-    status
   } = invoice;
 
   return (
@@ -41,7 +41,6 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyPro
           <p className="text-sm text-gray-500 mt-2">Invoice #: <span className="font-semibold">{invoiceNumber}</span></p>
           <p className="text-sm text-gray-500">Date Issued: <span className="font-semibold">{issueDate}</span></p>
           <p className="text-sm text-gray-500">Date Due: <span className="font-semibold">{dueDate}</span></p>
-          {status === 'Paid' && <div className="mt-4"><span className="text-2xl font-bold text-green-600 border-2 border-green-600 p-2 transform -rotate-12 inline-block">PAID</span></div>}
         </div>
       </header>
 
@@ -63,7 +62,6 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyPro
           <thead className="bg-gray-100">
             <tr>
               <th className="p-3 text-sm font-semibold uppercase text-gray-600">Description</th>
-              <th className="p-3 text-sm font-semibold uppercase text-gray-600 text-right w-24">Quantity</th>
               <th className="p-3 text-sm font-semibold uppercase text-gray-600 text-right w-32">Unit Price</th>
               <th className="p-3 text-sm font-semibold uppercase text-gray-600 text-right w-32">Total</th>
             </tr>
@@ -72,7 +70,6 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyPro
             {items.map(item => (
               <tr key={item.id} className="border-b border-gray-100">
                 <td className="p-3 text-sm">{item.description}</td>
-                <td className="p-3 text-sm text-right">{item.quantity}</td>
                 <td className="p-3 text-sm text-right">{formatCurrency(item.unitPrice)}</td>
                 <td className="p-3 text-sm text-right">{formatCurrency(item.total)}</td>
               </tr>
@@ -96,6 +93,24 @@ const PrintableInvoice: React.FC<PrintableInvoiceProps> = ({ invoice, companyPro
             <span className="text-lg font-bold font-mono">{formatCurrency(total)}</span>
           </div>
         </div>
+      </section>
+
+      {/* Terms & Conditions */}
+      <section className="mt-10">
+        <h3 className="text-md font-semibold text-gray-700 mb-2">Terms & Conditions</h3>
+        {preferences?.invoiceTerms ? (
+          <div className="text-xs whitespace-pre-line leading-relaxed text-gray-600 border border-gray-200 rounded p-3 bg-gray-50">
+            {preferences.invoiceTerms}
+          </div>
+        ) : (
+          <ul className="text-xs leading-relaxed text-gray-600 list-disc pl-5 space-y-1">
+            <li>Payment due within 30 days unless otherwise agreed in writing.</li>
+            <li>Late payments may incur a service charge of 1.5% per month.</li>
+            <li>Please quote the invoice number on all remittances.</li>
+            <li>Goods/services remain the property of {companyProfile.name} until fully paid.</li>
+            <li>Discrepancies must be reported within 7 days of receipt.</li>
+          </ul>
+        )}
       </section>
 
       {comments && (

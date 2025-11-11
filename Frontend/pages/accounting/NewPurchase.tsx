@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Paperclip, Folder, Trash2, HelpCircle, Info, Plus, DollarSign } from 'lucide-react';
@@ -8,6 +6,19 @@ import { apiService } from '../../services/api';
 import type { Purchase, PurchaseLineItem, Contact } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
 import PurchasePaymentModal from '../../components/PurchasePaymentModal';
+
+// Helper to get default tax rate from saved preferences
+const getDefaultTaxRate = (): number => {
+  try {
+    const raw = localStorage.getItem('zenith-preferences');
+    if (raw) {
+      const prefs = JSON.parse(raw);
+      const rate = Number(prefs?.defaultTaxRate);
+      if (!isNaN(rate)) return rate;
+    }
+  } catch {}
+  return 10; // fallback
+};
 
 const NewPurchase: React.FC = () => {
     const { purchaseId } = useParams<{ purchaseId: string }>();
@@ -39,11 +50,27 @@ const NewPurchase: React.FC = () => {
                 const contactsData = await apiService.getContacts();
                 setSuppliers((contactsData as Contact[]).filter(c => c.type === 'Vendor'));
                 if (purchaseId) {
-                     const existingPurchase = await apiService.getPurchaseById(purchaseId);
-                     if (existingPurchase) {
-                         setPurchase(existingPurchase as Purchase);
-                     }
-                 }
+                    const existingPurchase: any = await apiService.getPurchaseById(purchaseId);
+                    if (existingPurchase) {
+                        // Normalize backend field names to controlled frontend state keys
+                        setPurchase(prev => ({
+                            // Keep defaults from previous (initial) to avoid undefined transitions
+                            ...prev,
+                            id: existingPurchase.id,
+                            purchaseType: existingPurchase.purchaseType || existingPurchase.purchase_type || prev.purchaseType || 'Credit',
+                            date: existingPurchase.date || prev.date || new Date().toISOString().split('T')[0],
+                            dueDate: existingPurchase.dueDate || existingPurchase.due_date || prev.dueDate || '',
+                            purchaseOrderNumber: existingPurchase.purchaseOrderNumber || existingPurchase.purchase_order_number || prev.purchaseOrderNumber || '',
+                            currency: existingPurchase.currency || prev.currency || 'AED',
+                            supplier: (contactsData as Contact[]).find(c => c.id === (existingPurchase.supplier?.id || existingPurchase.supplier_id)) || prev.supplier,
+                            lineItems: prev.lineItems && prev.lineItems.length ? prev.lineItems : [{ id: '1', description: '', amount: 0, account: 'Expenses', vat: 0 }],
+                            subtotal: existingPurchase.subtotal ?? prev.subtotal ?? 0,
+                            vat: existingPurchase.vat ?? prev.vat ?? 0,
+                            total: existingPurchase.total ?? prev.total ?? 0,
+                            status: existingPurchase.status || prev.status,
+                        }));
+                    }
+                }
             } catch (error) {
                 console.error('Failed to load data:', error);
             }
@@ -112,6 +139,14 @@ const NewPurchase: React.FC = () => {
     
     const handleLineChange = (id: string, field: keyof PurchaseLineItem, value: string | number) => {
         const newItems = purchase.lineItems?.map(item => item.id === id ? { ...item, [field]: value } : item);
+        setPurchase(p => ({ ...p, lineItems: newItems }));
+    };
+
+    const handleToggleVat = (id: string) => {
+        const defaultRate = getDefaultTaxRate();
+        const newItems = (purchase.lineItems || []).map(item =>
+            item.id === id ? { ...item, vat: item.vat && item.vat > 0 ? 0 : defaultRate } : item
+        );
         setPurchase(p => ({ ...p, lineItems: newItems }));
     };
 
@@ -217,11 +252,11 @@ const NewPurchase: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="relative">
                                 <label className="text-xs text-gray-500 dark:text-gray-300">Date</label>
-                                <input type="date" value={purchase.date} onChange={(e) => handleFieldChange('date', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                <input type="date" value={purchase.date || ''} onChange={(e) => handleFieldChange('date', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
                             </div>
                             <div className="relative">
                                 <label className="text-xs text-gray-500 dark:text-gray-300">Due Date</label>
-                                <input type="date" value={purchase.dueDate} onChange={(e) => handleFieldChange('dueDate', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary" disabled={purchase.purchaseType === 'Cash'}/>
+                                <input type="date" value={purchase.dueDate || ''} onChange={(e) => handleFieldChange('dueDate', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary" disabled={purchase.purchaseType === 'Cash'}/>
                             </div>
                         </div>
                         
@@ -261,19 +296,32 @@ const NewPurchase: React.FC = () => {
                                     <button onClick={() => removeLine(line.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18}/></button>
                                  </div>
                                  <div className="relative">
-                                     <input type="number" placeholder="Amount" value={line.amount || ''} onChange={e => handleLineChange(line.id, 'amount', Number(e.target.value))} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                     <input type="number" placeholder="Amount" value={line.amount ?? ''} onChange={e => handleLineChange(line.id, 'amount', Number(e.target.value))} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
                                  </div>
                                  <div className="relative">
-                                     <input type="text" placeholder="Description" value={line.description} onChange={e => handleLineChange(line.id, 'description', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                     <input type="text" placeholder="Description" value={line.description || ''} onChange={e => handleLineChange(line.id, 'description', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
                                  </div>
                                   <div>
-                                     <select value={line.account} onChange={e => handleLineChange(line.id, 'account', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary">
+                                     <select value={line.account || 'Expenses'} onChange={e => handleLineChange(line.id, 'account', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary">
                                         <option>Expenses</option>
                                         <option>Cost of Goods Sold</option>
                                         <option>Assets</option>
                                      </select>
                                 </div>
-                                <button className="text-xs text-primary font-semibold">ADD VAT</button>
+                                {Number(line.vat) > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 items-end">
+                                    <div>
+                                      <label className="text-xs text-gray-500 dark:text-gray-300">VAT %</label>
+                                      <input type="number" min={0} max={100} step={0.5} value={line.vat} onChange={e => handleLineChange(line.id, 'vat', Number(e.target.value))} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                    </div>
+                                    <div className="text-right text-sm text-gray-600 dark:text-gray-300">
+                                      VAT Amount: <span className="font-mono">{formatCurrency((line.amount || 0) * (Number(line.vat || 0)/100))}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <button type="button" onClick={() => handleToggleVat(line.id)} className="text-xs text-primary font-semibold">
+                                  {Number(line.vat) > 0 ? 'REMOVE VAT' : 'ADD VAT'}
+                                </button>
                             </div>
                         ))}
                          <button onClick={addLine} className="text-primary font-bold flex items-center"><Plus size={16} className="mr-1"/> ADD LINE</button>

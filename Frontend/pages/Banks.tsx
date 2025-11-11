@@ -150,7 +150,13 @@ const Banks: React.FC = () => {
                             </div>
                             <p className="text-sm text-gray-500 dark:text-gray-400">{account.bankName || account.bank_name}</p>
                             <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{(account.accountNumber || account.account_number || '').slice(-4).padStart((account.accountNumber || account.account_number || '').length, '*')}</p>
-                            <p className="text-2xl font-bold text-dark dark:text-white mt-4 font-mono">{formatCurrency(account.balance)}</p>
+                            <p 
+                                className="text-2xl font-bold mt-4 font-mono"
+                                style={{ 
+                                    color: '#ff0000',
+                                    backgroundColor: '#ffff00' 
+                                }}
+                            >{formatCurrency(account.balance)}</p>
                         </div>
                         <div className="mt-6 flex items-center justify-between">
                              <Link to={`/banks/${account.id}`} className="text-sm font-semibold text-primary hover:underline">View Transactions</Link>

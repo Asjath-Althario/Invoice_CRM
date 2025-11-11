@@ -56,6 +56,7 @@ const MainLayout: React.FC = () => {
 
 const App: React.FC = () => {
   useEffect(() => {
+    // Apply theme from saved preferences or default
     applyTheme();
   }, []);
 

@@ -36,6 +36,8 @@ router.get('/', authMiddleware, async (req, res) => {
       if (invoice.due_date) {
         invoice.dueDate = invoice.due_date.toISOString().split('T')[0];
       }
+      // Map database field names to frontend expected field names
+      if (invoice.invoice_number) invoice.invoiceNumber = invoice.invoice_number;
       // Provide API response aliases expected by frontend
       if (invoice.tax !== undefined) invoice.tax = invoice.tax;
       if (invoice.total !== undefined) invoice.total = invoice.total;
@@ -128,6 +130,9 @@ router.post('/', authMiddleware, async (req, res) => {
       type: invoice[0].contact_type,
       trn: invoice[0].contact_trn
     };
+
+    // Map database field names to frontend expected field names
+    if (invoice[0].invoice_number) invoice[0].invoiceNumber = invoice[0].invoice_number;
 
     res.status(201).json(invoice[0]);
   } catch (error) {
@@ -252,6 +257,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
       trn: invoice[0].contact_trn
     };
 
+    // Map database field names to frontend expected field names
+    if (invoice[0].invoice_number) invoice[0].invoiceNumber = invoice[0].invoice_number;
+
     res.json(invoice[0]);
   } catch (error) {
     console.error('Update invoice error:', error);
@@ -310,6 +318,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
     if (invoice.due_date) {
         invoice.dueDate = new Date(invoice.due_date).toISOString().split('T')[0];
     }
+    // Map database field names to frontend expected field names
+    if (invoice.invoice_number) invoice.invoiceNumber = invoice.invoice_number;
     // Provide API response aliases expected by frontend
     if (invoice.tax !== undefined) invoice.tax = invoice.tax;
     if (invoice.total !== undefined) invoice.total = invoice.total;

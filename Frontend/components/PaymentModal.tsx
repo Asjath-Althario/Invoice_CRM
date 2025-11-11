@@ -50,24 +50,32 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose }) => {
 
     try {
       console.log('Recording payment for invoice:', invoice.id);
-      console.log('Payment data:', { paymentDate, amount, depositToAccountId });
+      console.log('Payment data:', { paymentDate, amount, depositToAccountId, paymentMethod, notes });
 
-      // Update invoice status to Paid - only send necessary fields
+      // Update invoice status to Paid - include contact_id as required by backend
       const invoiceUpdate = {
         status: 'Paid',
-        // Don't include dates that might cause issues
+        contact_id: invoice.contact.id, // Include contact_id as required by backend
       };
       await apiService.updateInvoice(invoice.id, invoiceUpdate);
 
-      // Add bank transaction
+      // Add bank transaction with payment method and notes
+      const transactionDescription = notes 
+        ? `Payment for Invoice #${invoice.invoiceNumber} - ${paymentMethod} - ${notes}`
+        : `Payment for Invoice #${invoice.invoiceNumber} - ${paymentMethod}`;
+      
       await apiService.addBankTransaction(depositToAccountId, {
         date: paymentDate,
-        description: `Payment for Invoice #${invoice.invoiceNumber}`,
+        description: transactionDescription,
         amount: amount,
         type: 'credit' // This is income to the business
       });
 
+      alert('Payment recorded successfully!');
       onClose();
+      
+      // Trigger a refresh of the invoices list
+      window.location.reload();
     } catch (error) {
       console.error('Failed to record payment:', error);
       alert('Failed to record payment. Please try again.');
