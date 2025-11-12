@@ -105,8 +105,8 @@ const Settings: React.FC = () => {
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            if (file.size > 1 * 1024 * 1024) { // 1MB size limit
-                alert('Logo image is too large. Please select an image smaller than 1MB.');
+            if (file.size > 2 * 1024 * 1024) { // 2MB size limit (aligned with backend)
+                alert('Logo image is too large. Please select an image smaller than 2MB.');
                 return;
             }
             const reader = new FileReader();
@@ -126,7 +126,8 @@ const Settings: React.FC = () => {
                 alert('Company profile updated!');
             } catch (error) {
                 console.error('Failed to update company profile:', error);
-                alert('Failed to update company profile. Please try again.');
+                // Surface backend details if present in error message
+                alert('Failed to update company profile. ' + (error instanceof Error ? error.message : 'Please try again.'));
             }
         }
     };
@@ -232,7 +233,8 @@ const Settings: React.FC = () => {
                                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                             <UploadCloud size={24} className="text-gray-500 dark:text-gray-400 mb-2"/>
                                             <p className="mb-2 text-sm text-gray-500 dark:text-gray-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, GIF (MAX. 1MB)</p>
+                                            {/* FIX: Adjust max size text from 1MB to 2MB to match backend */}
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, GIF (MAX. 2MB)</p>
                                         </div>
                                         <input id="logo-upload" type="file" className="hidden" accept="image/*" onChange={handleLogoChange}/>
                                     </label>

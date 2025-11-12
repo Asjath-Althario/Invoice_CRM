@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Edit, Trash2, Plus } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { RecurringInvoice } from '../../types';
-import { formatCurrency } from '../../utils/formatting';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 
 const getStatusChip = (status: RecurringInvoice['status']) => {
@@ -81,7 +81,7 @@ const RecurringInvoices: React.FC = () => {
                         {recurringInvoices.map((invoice) => (
                             <tr key={invoice.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{invoice.contact_name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.start_date}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(invoice.start_date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.frequency}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-medium">{calculateNextInvoiceDate(invoice.start_date, invoice.frequency)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-mono">{formatCurrency(invoice.total_amount)}</td>

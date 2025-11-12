@@ -22,6 +22,8 @@ const getDefaultTaxRate = (): number => {
 
 const NewPurchase: React.FC = () => {
     const { purchaseId } = useParams<{ purchaseId: string }>();
+    const location = window.location; // simple access
+    const readOnly = location.search.includes('mode=view');
     const navigate = useNavigate();
     const [file, setFile] = useState<File | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -166,13 +168,25 @@ const NewPurchase: React.FC = () => {
             return;
         }
 
-        const purchaseToSave = { ...purchase, status };
+        const payload: any = {
+            supplier_id: purchase.supplier?.id || null,
+            date: purchase.date,
+            due_date: purchase.purchaseType === 'Credit' ? (purchase.dueDate || null) : null,
+            subtotal: purchase.subtotal ?? 0,
+            vat: purchase.vat ?? 0,
+            total: purchase.total ?? 0,
+            status,
+            purchase_order_number: purchase.purchaseOrderNumber || null,
+            purchase_type: purchase.purchaseType || 'Credit',
+            currency: purchase.currency || 'AED',
+            file_path: (purchase as any).file?.name || null,
+        };
 
         try {
             if (isEditing) {
-                await apiService.updatePurchase(purchaseId!, purchaseToSave as Purchase);
+                await apiService.updatePurchase(purchaseId!, payload);
             } else {
-                await apiService.createPurchase(purchaseToSave as Purchase);
+                await apiService.createPurchase(payload);
             }
             navigate('/accounting/purchases');
         } catch (error) {
@@ -193,8 +207,8 @@ const NewPurchase: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-dark dark:text-light">{isEditing ? 'Edit Purchase' : 'New Purchase'}</h1>
-                {isEditing && purchase.status !== 'Paid' && (
+                <h1 className="text-3xl font-bold text-dark dark:text-light">{readOnly ? 'View Purchase' : (isEditing ? 'Edit Purchase' : 'New Purchase')}</h1>
+                {isEditing && !readOnly && purchase.status !== 'Paid' && (
                      <button onClick={() => setIsPaymentModalOpen(true)} className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-700">
                         <DollarSign size={18} className="mr-2"/> Record Payment
                     </button>
@@ -252,11 +266,11 @@ const NewPurchase: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="relative">
                                 <label className="text-xs text-gray-500 dark:text-gray-300">Date</label>
-                                <input type="date" value={purchase.date || ''} onChange={(e) => handleFieldChange('date', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                <input type="date" value={purchase.date || ''} onChange={(e) => !readOnly && handleFieldChange('date', e.target.value)} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"/>
                             </div>
                             <div className="relative">
                                 <label className="text-xs text-gray-500 dark:text-gray-300">Due Date</label>
-                                <input type="date" value={purchase.dueDate || ''} onChange={(e) => handleFieldChange('dueDate', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary" disabled={purchase.purchaseType === 'Cash'}/>
+                                <input type="date" value={purchase.dueDate || ''} onChange={(e) => !readOnly && handleFieldChange('dueDate', e.target.value)} disabled={readOnly || purchase.purchaseType === 'Cash'} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"/>
                             </div>
                         </div>
                         
@@ -265,14 +279,15 @@ const NewPurchase: React.FC = () => {
                             <input 
                                 type="text" 
                                 value={purchase.purchaseOrderNumber || ''} 
-                                onChange={(e) => handleFieldChange('purchaseOrderNumber', e.target.value)} 
-                                className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"
+                                onChange={(e) => !readOnly && handleFieldChange('purchaseOrderNumber', e.target.value)} 
+                                disabled={readOnly}
+                                className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"
                             />
                         </div>
 
                          <div>
                              <label className="text-xs text-gray-500 dark:text-gray-300">Currency</label>
-                             <select value={purchase.currency} onChange={(e) => handleFieldChange('currency', e.target.value as any)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary">
+                             <select value={purchase.currency} onChange={(e) => !readOnly && handleFieldChange('currency', e.target.value as any)} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60">
                                 <option value="AED">AED</option>
                                 <option value="USD">USD</option>
                                  <option value="EUR">EUR</option>
@@ -281,7 +296,7 @@ const NewPurchase: React.FC = () => {
                         </div>
                          <div>
                              <label className="text-xs text-gray-500 dark:text-gray-300">Supplier</label>
-                             <select value={purchase.supplier?.id || ''} onChange={(e) => handleSupplierChange(e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary">
+                             <select value={purchase.supplier?.id || ''} onChange={(e) => !readOnly && handleSupplierChange(e.target.value)} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60">
                                 <option value="">Select a supplier</option>
                                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                              </select>
@@ -296,13 +311,13 @@ const NewPurchase: React.FC = () => {
                                     <button onClick={() => removeLine(line.id)} className="text-red-500 hover:text-red-700"><Trash2 size={18}/></button>
                                  </div>
                                  <div className="relative">
-                                     <input type="number" placeholder="Amount" value={line.amount ?? ''} onChange={e => handleLineChange(line.id, 'amount', Number(e.target.value))} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                     <input type="number" placeholder="Amount" value={line.amount ?? ''} onChange={e => !readOnly && handleLineChange(line.id, 'amount', Number(e.target.value))} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"/>
                                  </div>
                                  <div className="relative">
-                                     <input type="text" placeholder="Description" value={line.description || ''} onChange={e => handleLineChange(line.id, 'description', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                     <input type="text" placeholder="Description" value={line.description || ''} onChange={e => !readOnly && handleLineChange(line.id, 'description', e.target.value)} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"/>
                                  </div>
                                   <div>
-                                     <select value={line.account || 'Expenses'} onChange={e => handleLineChange(line.id, 'account', e.target.value)} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary">
+                                     <select value={line.account || 'Expenses'} onChange={e => !readOnly && handleLineChange(line.id, 'account', e.target.value)} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60">
                                         <option>Expenses</option>
                                         <option>Cost of Goods Sold</option>
                                         <option>Assets</option>
@@ -312,19 +327,19 @@ const NewPurchase: React.FC = () => {
                                   <div className="grid grid-cols-2 gap-3 items-end">
                                     <div>
                                       <label className="text-xs text-gray-500 dark:text-gray-300">VAT %</label>
-                                      <input type="number" min={0} max={100} step={0.5} value={line.vat} onChange={e => handleLineChange(line.id, 'vat', Number(e.target.value))} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary"/>
+                                      <input type="number" min={0} max={100} step={0.5} value={line.vat} onChange={e => !readOnly && handleLineChange(line.id, 'vat', Number(e.target.value))} disabled={readOnly} className="w-full p-2 border-b-2 bg-white dark:bg-transparent dark:border-gray-600 focus:outline-none focus:border-primary disabled:opacity-60"/>
                                     </div>
                                     <div className="text-right text-sm text-gray-600 dark:text-gray-300">
                                       VAT Amount: <span className="font-mono">{formatCurrency((line.amount || 0) * (Number(line.vat || 0)/100))}</span>
                                     </div>
                                   </div>
                                 )}
-                                <button type="button" onClick={() => handleToggleVat(line.id)} className="text-xs text-primary font-semibold">
+                                <button type="button" onClick={() => !readOnly && handleToggleVat(line.id)} disabled={readOnly} className={`text-xs font-semibold ${readOnly ? 'text-gray-400 cursor-not-allowed' : 'text-primary'}`}>
                                   {Number(line.vat) > 0 ? 'REMOVE VAT' : 'ADD VAT'}
                                 </button>
                             </div>
                         ))}
-                         <button onClick={addLine} className="text-primary font-bold flex items-center"><Plus size={16} className="mr-1"/> ADD LINE</button>
+                         {!readOnly && <button onClick={addLine} className="text-primary font-bold flex items-center"><Plus size={16} className="mr-1"/> ADD LINE</button>}
                     </div>
                     
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md space-y-3">
@@ -343,8 +358,12 @@ const NewPurchase: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end space-x-3">
-                        <button onClick={() => handleSave('Draft')} className="bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">SAVE DRAFT</button>
-                        <button onClick={() => handleSave('Pending')} className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary/90">{isEditing ? 'UPDATE' : 'CREATE'}</button>
+                        {!readOnly && (
+                          <>
+                            <button onClick={() => handleSave('Draft')} className="bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-500">SAVE DRAFT</button>
+                            <button onClick={() => handleSave('Pending')} className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary/90">{isEditing ? 'UPDATE' : 'CREATE'}</button>
+                          </>
+                        )}
                     </div>
                 </div>
             </div>

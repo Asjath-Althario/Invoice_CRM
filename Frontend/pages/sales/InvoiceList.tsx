@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Edit, Trash2, DollarSign, Plus } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Invoice } from '../../types';
-import { formatCurrency } from '../../utils/formatting';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 import PaymentModal from '../../components/PaymentModal';
 
@@ -83,8 +83,8 @@ const InvoiceList: React.FC = () => {
                             <tr key={invoice.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary dark:text-blue-400 hover:underline cursor-pointer" onClick={() => navigate(`/sales/invoice/${invoice.id}`)}>{invoice.invoice_number || invoice.invoiceNumber}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{invoice.contact_name || invoice.contact?.name || 'N/A'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.issue_date || invoice.issueDate}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{invoice.due_date || invoice.dueDate}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(invoice.issue_date || invoice.issueDate)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(invoice.due_date || invoice.dueDate)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-mono">{formatCurrency(invoice.total_amount || invoice.total)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChip(invoice.status)}`}>

@@ -1,12 +1,9 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, Edit, Trash2, DollarSign } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Purchase } from '../../types';
-import { formatCurrency } from '../../utils/formatting';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 import PurchasePaymentModal from '../../components/PurchasePaymentModal';
 
@@ -19,6 +16,9 @@ const getStatusChip = (status: Purchase['status']) => {
     }
 };
 
+// Prefer supplier_name from backend join, then vendor (string on FE), then nested supplier.name
+const getVendorName = (purchase: any): string => purchase?.supplier_name || purchase?.vendor || purchase?.supplier?.name || '-';
+
 const PurchaseList: React.FC = () => {
     const [purchases, setPurchases] = useState<Purchase[]>([]);
     const [purchaseToPay, setPurchaseToPay] = useState<Purchase | null>(null);
@@ -26,8 +26,16 @@ const PurchaseList: React.FC = () => {
 
     const refreshPurchases = async () => {
         try {
-            const data = await apiService.getPurchases();
-            setPurchases(data);
+            const [data, contacts] = await Promise.all([
+                apiService.getPurchases() as Promise<any[]>,
+                apiService.getContacts() as Promise<any[]>
+            ]);
+            const contactMap = new Map(contacts.map((c: any) => [c.id, c.name]));
+            const normalized = data.map(p => ({
+                ...p,
+                supplier_name: p.supplier_name || contactMap.get(p.supplier_id) || p.vendor || p.supplier?.name || '-'
+            }));
+            setPurchases(normalized as any);
         } catch (error) {
             console.error('Failed to load purchases:', error);
         }
@@ -66,10 +74,10 @@ const PurchaseList: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {purchases.map((purchase) => (
+                        {purchases.map((purchase: any) => (
                             <tr key={purchase.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{purchase.order_date || purchase.date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-medium">{purchase.supplier_id || purchase.vendor}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(purchase.order_date || purchase.date)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 font-medium">{purchase.supplier_name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{purchase.purchase_order_number || purchase.purchaseOrderNumber || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-mono">{formatCurrency(purchase.total_amount || purchase.total)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -87,7 +95,7 @@ const PurchaseList: React.FC = () => {
                                             <DollarSign size={18}/>
                                         </button>
                                      )}
-                                     <button onClick={() => navigate(`/accounting/purchases/${purchase.id}`)} title="View Details" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"><Eye size={18}/></button>
+                                     <button onClick={() => navigate(`/accounting/purchases/${purchase.id}?mode=view`)} title="View Details" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"><Eye size={18}/></button>
                                      <button onClick={() => navigate(`/accounting/purchases/${purchase.id}`)} title="Edit Purchase" className="text-primary hover:text-primary/80 dark:text-blue-400 dark:hover:text-blue-300"><Edit size={18}/></button>
                                      <button title="Delete Purchase" onClick={() => handleDelete(purchase.id)} className="text-red-600 hover:text-red-800 dark:text-red-500 dark:hover:text-red-400"><Trash2 size={18}/></button>
                                 </td>

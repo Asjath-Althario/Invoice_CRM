@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { PettyCashTransaction, BankAccount } from '../../types';
-import { formatCurrency } from '../../utils/formatting';
+import { formatCurrency, formatDate } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 
 const getStatusChip = (status: PettyCashTransaction['status']) => {
@@ -292,7 +292,7 @@ const PettyCash: React.FC = () => {
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {transactions.map((t) => (
                             <tr key={t.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{t.date}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(t.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{t.description}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{t.type}</td>
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-mono ${t.type === 'Expense' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>

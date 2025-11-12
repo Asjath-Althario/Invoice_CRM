@@ -14,10 +14,15 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         proxy: {
             '/api': {
-              target: 'http://localhost:5001', // backend is running on 5001
+              target: 'http://localhost:5001', // backend API
               changeOrigin: true,
               secure: false,
             },
+            '/uploads': { // serve uploaded assets (logos, receipts)
+              target: 'http://localhost:5001',
+              changeOrigin: true,
+              secure: false,
+            }
           },
       },
       plugins: [react()],

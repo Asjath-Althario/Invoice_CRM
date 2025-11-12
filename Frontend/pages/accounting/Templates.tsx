@@ -1,14 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Scale, ShoppingCart, Rocket } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { apiService } from '../../services/api';
+import type { CompanyProfile } from '../../types';
 
 const Templates: React.FC = () => {
+    const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({ name: '', address: '', email: '', phone: '', logoUrl: '' });
+
+    useEffect(() => {
+        const loadCompanyProfile = async () => {
+            try {
+                const profile = await apiService.getCompanyProfile();
+                setCompanyProfile(profile as CompanyProfile);
+            } catch (error) {
+                console.error('Failed to load company profile:', error);
+            }
+        };
+        loadCompanyProfile();
+    }, []);
+
     return (
         <div className="space-y-6">
             <nav className="text-sm text-gray-500" aria-label="Breadcrumb">
                 <ol className="list-none p-0 inline-flex space-x-2">
                     <li>
-                        <Link to="/dashboard" className="hover:text-primary">Lofty</Link>
+                        <Link to="/dashboard" className="hover:text-primary">{companyProfile.name || 'Company'}</Link>
                     </li>
                     <li>
                         <span>/</span>

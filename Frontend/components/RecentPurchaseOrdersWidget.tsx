@@ -11,20 +11,27 @@ const RecentPurchaseOrdersWidget: React.FC = () => {
 
     const refreshData = async () => {
         try {
-            const raw = (await apiService.getPurchases()) as any[];
-            const purchases = raw.map(p => ({
-                ...p,
-                date: p.date || p.purchase_date,
-                purchaseOrderNumber: p.purchase_order_number || p.purchaseOrderNumber,
-                total: p.total ?? p.total_amount ?? 0,
-                status: p.status || 'Draft',
-                purchaseType: p.purchase_type || p.purchaseType || 'Credit',
-                currency: p.currency || 'AED',
-                vendor: p.vendor || p.supplier_name || p.supplier || 'Vendor',
-                lineItems: p.lineItems || [],
-                subtotal: p.subtotal ?? 0,
-                vat: p.vat ?? p.tax ?? 0,
-            }))
+            const [rawPurchases, contacts] = await Promise.all([
+                apiService.getPurchases() as Promise<any[]>,
+                apiService.getContacts() as Promise<any[]>
+            ]);
+            const contactMap = new Map(contacts.map((c: any) => [c.id, c.name]));
+            const purchases = rawPurchases.map(p => {
+                const vendorName = p.supplier_name || contactMap.get(p.supplier_id) || p.vendor || p.supplier?.name || '—';
+                return {
+                    ...p,
+                    date: p.date || p.purchase_date,
+                    purchaseOrderNumber: p.purchase_order_number || p.purchaseOrderNumber || '',
+                    total: p.total ?? p.total_amount ?? 0,
+                    status: p.status || 'Draft',
+                    purchaseType: p.purchase_type || p.purchaseType || 'Credit',
+                    currency: p.currency || 'AED',
+                    vendor: vendorName,
+                    lineItems: p.lineItems || [],
+                    subtotal: p.subtotal ?? 0,
+                    vat: p.vat ?? p.tax ?? 0,
+                };
+            })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
             .slice(0, 5) as Purchase[];
             setRecentPurchases(purchases);
@@ -48,10 +55,13 @@ const RecentPurchaseOrdersWidget: React.FC = () => {
                     {recentPurchases.map(purchase => (
                         <li key={purchase.id} className="flex items-center justify-between">
                             <div>
-                                <Link to={`/accounting/purchases/${purchase.id}`} className="font-medium text-primary hover:underline">{purchase.vendor}</Link>
+                                <Link to={`/accounting/purchases/${purchase.id}`} className="font-medium text-primary hover:underline" title={purchase.vendor}>{purchase.vendor}</Link>
                                 <p className="text-xs text-gray-500 dark:text-gray-400">Date: {purchase.date}</p>
+                                {purchase.purchaseOrderNumber && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">PO: {purchase.purchaseOrderNumber}</p>
+                                )}
                             </div>
-                            <span className="font-mono font-semibold text-sm dark:text-gray-200">{formatCurrency(purchase.total)}</span>
+                            <span className="font-mono font-semibold text-sm dark:text-gray-200" title={`Total in ${purchase.currency}`}>{formatCurrency(purchase.total)}</span>
                         </li>
                     ))}
                 </ul>

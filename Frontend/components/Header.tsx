@@ -39,9 +39,52 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const notificationsRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const refreshNotifications = () => {
-      // TODO: Replace with real backend notifications when available
-      setNotifications([]);
+  const getReadSet = (): Set<string> => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem('zenith-read-notifications') || '[]')); } catch { return new Set(); }
+  };
+  const setReadSet = (ids: Set<string>) => {
+    try { localStorage.setItem('zenith-read-notifications', JSON.stringify(Array.from(ids))); } catch {}
+  };
+
+  const refreshNotifications = async () => {
+      try {
+        const [invoices, products] = await Promise.all([
+          apiService.getInvoices() as Promise<any[]>,
+          apiService.getProductsServices() as Promise<any[]>
+        ]);
+        const readSet = getReadSet();
+        const today = new Date();
+
+        const invoiceNotifs: Notification[] = (invoices || []).flatMap((inv: any) => {
+          const due = new Date(inv.dueDate || inv.due_date);
+          if (!Number.isFinite(due.getTime())) return [] as Notification[];
+          const ms = due.getTime() - today.getTime();
+          const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
+          if (inv.status === 'Paid') return [] as Notification[];
+          if (days < -0) {
+            const id = `inv-overdue-${inv.id}`;
+            return [{ id, message: `Invoice #${inv.invoiceNumber || inv.invoice_number} for ${inv.contact?.name || 'Customer'} is overdue by ${Math.abs(days)} day(s).`, date: (inv.dueDate || inv.due_date || '').toString(), read: readSet.has(id), link: `/sales/invoice/${inv.id}`, type: 'general' }];
+          }
+          if (days <= 10) {
+            const id = `inv-due-${inv.id}`;
+            return [{ id, message: `Invoice #${inv.invoiceNumber || inv.invoice_number} due in ${days} day(s) for ${inv.contact?.name || 'Customer'}.`, date: (inv.dueDate || inv.due_date || '').toString(), read: readSet.has(id), link: `/sales/invoice/${inv.id}`, type: 'general' }];
+          }
+          return [] as Notification[];
+        });
+
+        const stockNotifs: Notification[] = (products || [])
+          .filter((p: any) => (p.type === 'Product') && (Number(p.stockLevel ?? p.stock_quantity) <= Number(p.reorderPoint ?? p.low_stock_threshold)))
+          .map((p: any) => {
+            const id = `stock-${p.id}`;
+            return { id, message: `Stock for "${p.name}" is low (${p.stockLevel ?? p.stock_quantity} remaining).`, date: new Date().toISOString().slice(0,10), read: readSet.has(id), link: '/sales/products', type: 'stock' as const };
+          });
+
+        const all = [...invoiceNotifs, ...stockNotifs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setNotifications(all);
+      } catch (e) {
+        console.error('Failed to load notifications:', e);
+        setNotifications([]);
+      }
   };
 
   useEffect(() => {
@@ -66,7 +109,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const toggleTheme = async () => {
     const newTheme: 'Light' | 'Dark' = theme === 'Light' ? 'Dark' : 'Light';
     try {
-      const currentPrefs = (() => { try { return JSON.parse(localStorage.getItem('zenith-preferences') || '{}'); } catch { return {}; }})();
+      const currentPrefs = (() => { try { return JSON.parse(localStorage.getItem('zenith-preferences') || '{}'); } catch { return {}; } })();
       const updated = await apiService.updatePreferences({ ...currentPrefs, theme: newTheme });
       try { localStorage.setItem('zenith-preferences', JSON.stringify(updated)); } catch {}
       applyTheme(newTheme);
@@ -80,8 +123,20 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleMarkAllRead = () => {
-      // Placeholder: no-op until real notifications exist
-      setNotifications((prev) => prev.map(n => ({ ...n, read: true })));
+      const allIds = new Set<string>(notifications.map(n => n.id));
+      setReadSet(allIds);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const handleOpenNotifications = () => {
+    setNotificationsOpen((open) => {
+      const next = !open;
+      if (next) {
+        // refresh when opening to show latest
+        refreshNotifications();
+      }
+      return next;
+    });
   };
 
   return (
@@ -98,7 +153,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen }) => {
         </button>
         
         <div className="relative" ref={notificationsRef}>
-            <button onClick={() => setNotificationsOpen(!isNotificationsOpen)} className="relative p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <button onClick={handleOpenNotifications} className="relative p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
               <Bell size={20} />
               {unreadCount > 0 && (
                 <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">{unreadCount}</span>

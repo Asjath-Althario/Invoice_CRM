@@ -51,7 +51,9 @@ router.get('/company-profile', async (req, res) => {
 router.put('/company-profile', async (req, res) => {
   try {
     console.log('Update company profile request body received');
+    console.log('Request body keys:', Object.keys(req.body || {}));
     let { name, address, email, phone, logoUrl, website, taxId } = req.body || {};
+    console.log('logoUrl type:', typeof logoUrl, 'starts with data:image:', logoUrl?.startsWith?.('data:image/'));
 
     // Ensure a default row exists
     await db.query("INSERT IGNORE INTO company_profile (id, company_name) VALUES ('default', '')");
@@ -61,7 +63,7 @@ router.put('/company-profile', async (req, res) => {
       try {
         const base64 = logoUrl.split(',')[1] || '';
         const approxBytes = Math.floor((base64.length * 3) / 4); // base64 -> bytes approximation
-        const maxBytes = 2 * 1024 * 1024; // 2MB limit to avoid DB packet issues
+        const maxBytes = 2 * 1024 * 1024; // 2MB limit for upload
         if (approxBytes > maxBytes) {
           return res.status(413).json({ message: 'Logo image too large. Please upload an image under 2MB.' });
         }
@@ -73,13 +75,15 @@ router.put('/company-profile', async (req, res) => {
     // If logoUrl is a data URL, save it as a file and store the URL instead of base64
     if (typeof logoUrl === 'string' && logoUrl.startsWith('data:image/')) {
       try {
+        console.log('Processing base64 logo data...');
         const match = logoUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
         if (match) {
           const mime = match[1];
           const base64Data = match[2];
           const buffer = Buffer.from(base64Data, 'base64');
           const ext = mime.split('/')[1].replace('jpeg', 'jpg');
-          const uploadsDir = path.join(__dirname, '../uploads');
+          // FIX: Ensure uploads dir matches the static path configured in app.js (Backend/uploads)
+          const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
           if (!fs.existsSync(uploadsDir)) {
             fs.mkdirSync(uploadsDir, { recursive: true });
           }
@@ -88,6 +92,8 @@ router.put('/company-profile', async (req, res) => {
           fs.writeFileSync(filePath, buffer);
           // Replace with public URL
           logoUrl = `/uploads/${filename}`;
+        } else {
+          console.log('Base64 regex match failed');
         }
       } catch (fileErr) {
         console.error('Failed to save logo file:', fileErr);
@@ -115,13 +121,24 @@ router.put('/company-profile', async (req, res) => {
       tax_id: taxId != null ? taxId : existing.tax_id || ''
     };
 
+    console.log('Updating database with values:', {
+      company_name: next.company_name,
+      logo_url: next.logo_url?.substring(0, 50) + '...' // truncate for logging
+    });
+
     await db.query(
       'UPDATE company_profile SET company_name = ?, address = ?, email = ?, phone = ?, logo_url = ?, website = ?, tax_id = ?, updated_at = NOW() WHERE id = ?',
       [ next.company_name, next.address, next.email, next.phone, next.logo_url, next.website, next.tax_id, 'default' ]
     );
 
+    console.log('Database update completed successfully');
+
     const [profiles] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
     const profile = profiles[0];
+    console.log('Retrieved updated profile:', {
+      id: profile.id,
+      logoUrl: profile.logo_url?.substring(0, 50) + '...'
+    });
     const response = {
       id: profile.id,
       name: profile.company_name || '',
@@ -133,6 +150,7 @@ router.put('/company-profile', async (req, res) => {
       taxId: profile.tax_id || ''
     };
 
+    console.log('Sending response');
     res.json(response);
   } catch (error) {
     console.error('Update company profile error:', error);
@@ -140,7 +158,8 @@ router.put('/company-profile', async (req, res) => {
     if (error && (error.code || error.errno || error.sqlMessage)) {
       console.error('DB Error details:', { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage });
     }
-    res.status(500).json({ message: 'Server error', error: error.message });
+    // Provide clearer error details to client for debugging
+    res.status(500).json({ message: 'Failed to update company profile', details: error.message });
   }
 });
 
