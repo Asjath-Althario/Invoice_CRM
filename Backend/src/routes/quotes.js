@@ -27,7 +27,11 @@ router.get('/', async (req, res) => {
 
     for (let quote of quotes) {
       const [items] = await db.query('SELECT * FROM quote_items WHERE quote_id = ?', [quote.id]);
-      quote.items = items;
+      // Map database field names to frontend expected field names
+      quote.items = items.map(item => ({
+        ...item,
+        unitPrice: item.unit_price
+      }));
     }
 
     res.json(quotes);
@@ -41,6 +45,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { contact_id, issue_date, expiry_date, subtotal, tax_amount, total_amount, notes, status, items } = req.body;
+    console.log('Create quote request:', req.body);
     const quoteId = uuidv4();
     const quoteNumber = `QT-${Date.now().toString().slice(-6)}`;
 
@@ -48,16 +53,18 @@ router.post('/', async (req, res) => {
     const formattedIssueDate = issue_date ? new Date(issue_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
     const formattedExpiryDate = expiry_date ? new Date(expiry_date).toISOString().split('T')[0] : new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
 
+    console.log('Inserting quote:', [quoteId, quoteNumber, contact_id, formattedIssueDate, formattedExpiryDate, subtotal, tax_amount, total_amount, notes, status]);
     await db.query(
       'INSERT INTO quotes (id, quote_number, contact_id, issue_date, expiry_date, subtotal, tax_amount, total_amount, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [quoteId, quoteNumber, contact_id, formattedIssueDate, formattedExpiryDate, subtotal, tax_amount, total_amount, notes, status]
+      [quoteId, quoteNumber, contact_id, formattedIssueDate, formattedExpiryDate, subtotal || 0, tax_amount || 0, total_amount || 0, notes || '', status || 'Draft']
     );
 
     if (items && items.length > 0) {
+      console.log('Inserting quote items:', items);
       for (const item of items) {
         await db.query(
           'INSERT INTO quote_items (id, quote_id, description, quantity, unit_price, total, product_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuidv4(), quoteId, item.description, item.quantity, item.unitPrice, item.total, item.product_id || null]
+          [uuidv4(), quoteId, item.description, item.quantity, item.unitPrice || 0, item.total || 0, item.product_id || null]
         );
       }
     }
@@ -66,7 +73,8 @@ router.post('/', async (req, res) => {
     res.status(201).json(newQuote[0]);
   } catch (error) {
     console.error('Create quote error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error details:', error.message, error.sqlMessage, error.code);
+    res.status(500).json({ message: 'Server error', sqlMessage: error.sqlMessage });
   }
 });
 
@@ -94,7 +102,12 @@ router.get('/:id', async (req, res) => {
 
       const quote = quotes[0];
       const [items] = await db.query('SELECT * FROM quote_items WHERE quote_id = ?', [id]);
-      quote.items = items;
+      // Map database field names to frontend expected field names for items
+      quote.items = items.map(item => ({
+        ...item,
+        unitPrice: item.unit_price,
+        unit_price: undefined // Remove the snake_case version
+      }));
 
       // Format dates for frontend display
       if (quote.issue_date) {
@@ -120,23 +133,26 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { contact_id, issue_date, expiry_date, subtotal, tax_amount, total_amount, notes, status, items } = req.body;
+    console.log('Update quote request:', { id, body: req.body });
 
     // Ensure dates are in YYYY-MM-DD format
     const formattedIssueDate = issue_date ? new Date(issue_date).toISOString().substring(0, 10) : null;
     const formattedExpiryDate = expiry_date ? new Date(expiry_date).toISOString().substring(0, 10) : null;
 
+    console.log('Updating quote:', [contact_id, formattedIssueDate, formattedExpiryDate, subtotal, tax_amount, total_amount, notes, status, id]);
     await db.query(
       'UPDATE quotes SET contact_id = ?, issue_date = ?, expiry_date = ?, subtotal = ?, tax_amount = ?, total_amount = ?, notes = ?, status = ? WHERE id = ?',
-      [contact_id, formattedIssueDate, formattedExpiryDate, subtotal, tax_amount, total_amount, notes, status, id]
+      [contact_id, formattedIssueDate, formattedExpiryDate, subtotal || 0, tax_amount || 0, total_amount || 0, notes || '', status || 'Draft', id]
     );
 
     await db.query('DELETE FROM quote_items WHERE quote_id = ?', [id]);
 
     if (items && items.length > 0) {
+      console.log('Updating quote items:', items);
       for (const item of items) {
         await db.query(
           'INSERT INTO quote_items (id, quote_id, description, quantity, unit_price, total, product_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuidv4(), id, item.description, item.quantity, item.unitPrice, item.total, item.product_id || null]
+          [uuidv4(), id, item.description, item.quantity, item.unitPrice || 0, item.total || 0, item.product_id || null]
         );
       }
     }
@@ -145,7 +161,8 @@ router.put('/:id', async (req, res) => {
     res.json(updatedQuote[0]);
   } catch (error) {
     console.error('Update quote error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error details:', error.message, error.sqlMessage, error.code);
+    res.status(500).json({ message: 'Server error', sqlMessage: error.sqlMessage });
   }
 });
 

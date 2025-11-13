@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, DollarSign, Printer, MessageSquare, X } from 'lucide-react';
+import { Plus, Trash2, Save, DollarSign, Printer, MessageSquare, X, Mail } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Invoice, InvoiceItem, Contact, ProductOrService, CompanyProfile } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 import PaymentModal from '../../components/PaymentModal';
 import PrintableInvoice from '../../components/PrintableInvoice';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const InvoiceDetail: React.FC = () => {
     const { invoiceId } = useParams();
@@ -30,6 +32,7 @@ const InvoiceDetail: React.FC = () => {
     const [isWhatsAppPreviewOpen, setIsWhatsAppPreviewOpen] = useState(false);
     const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
     const [whatsAppMessage, setWhatsAppMessage] = useState('');
+    const printableRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -218,6 +221,34 @@ const InvoiceDetail: React.FC = () => {
         setIsWhatsAppPreviewOpen(false);
     };
 
+    const handleSendEmail = async () => {
+        if (!invoiceId) { alert('Save the invoice first.'); return; }
+        if (!invoice.contact?.email) { alert('Contact email address is required.'); return; }
+        try {
+            // Generate PDF from printable component
+            const printableElement = printableRef.current?.querySelector('.printable-invoice-root');
+            if (!printableElement) {
+                alert('Printable invoice not ready. Open print preview first.');
+                return;
+            }
+            const canvas = await html2canvas(printableElement as HTMLElement, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'pt', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pageWidth - 40; // margins
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+            const blob = pdf.output('blob');
+            const file = new File([blob], `Invoice-${invoice.invoiceNumber || invoiceId}.pdf`, { type: 'application/pdf' });
+            await apiService.sendInvoiceEmailWithPdf(invoiceId, file, invoice.contact.email, invoice.contact.name);
+            alert('Invoice sent via email with attached PDF successfully!');
+        } catch (error) {
+            console.error('Failed to send email:', error);
+            alert('Failed to send email. Please try again.');
+        }
+    };
+
     return (
         <>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md space-y-6 print:hidden">
@@ -233,6 +264,9 @@ const InvoiceDetail: React.FC = () => {
                             <>
                                 <button onClick={handleExportPdf} className="flex items-center bg-gray-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-gray-700">
                                     <Printer size={18} className="mr-2" /> Export as PDF
+                                </button>
+                                <button onClick={handleSendEmail} className="flex items-center bg-purple-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-purple-700">
+                                    <Mail size={18} className="mr-2" /> Send via Email
                                 </button>
                                 <button onClick={handleSendWhatsApp} className="flex items-center bg-blue-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-600">
                                     <MessageSquare size={18} className="mr-2" /> Send via WhatsApp
@@ -408,6 +442,12 @@ const InvoiceDetail: React.FC = () => {
 
             <div id="printable-invoice" className="hidden print:block">
                 {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} preferences={preferences} />}
+            </div>
+
+            <div ref={printableRef} style={{ position: 'absolute', top: -9999, left: -9999 }}>
+                <div className="printable-invoice-root">
+                    {companyProfile && <PrintableInvoice invoice={invoice} companyProfile={companyProfile} taxRate={preferences?.defaultTaxRate || 0} preferences={preferences} />}
+                </div>
             </div>
         </>
     );

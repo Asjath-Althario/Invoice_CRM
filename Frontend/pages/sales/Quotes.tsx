@@ -1,11 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit, Trash2 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Quote } from '../../types';
-import { formatCurrency, formatDate } from '../../utils/formatting';
+import { formatCurrency } from '../../utils/formatting';
 import eventBus from '../../utils/eventBus';
 
 
@@ -56,6 +54,13 @@ const Quotes: React.FC = () => {
 
     useEffect(() => {
         refreshData();
+        const off = eventBus.on('quoteConverted', (data) => {
+            refreshData();
+            if (data?.message) {
+                alert(data.message);
+            }
+        });
+        return () => off();
     }, []);
 
 
@@ -90,8 +95,8 @@ const Quotes: React.FC = () => {
                             <tr key={quote.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary dark:text-blue-400 hover:underline cursor-pointer" onClick={() => navigate(`/sales/quote/${quote.id}`)}>{quote.quoteNumber}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{quote.contact.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(quote.issueDate)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(quote.expiryDate)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{quote.issueDate}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{quote.expiryDate}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-mono">{formatCurrency(quote.total)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChip(quote.status)}`}>

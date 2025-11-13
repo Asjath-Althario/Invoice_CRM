@@ -4,6 +4,7 @@ import { Plus, Trash2, Save, RefreshCw } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Quote, InvoiceItem, Contact, ProductOrService } from '../../types';
 import { formatCurrency } from '../../utils/formatting';
+import eventBus from '../../utils/eventBus';
 
 const QuoteDetail: React.FC = () => {
     const { quoteId } = useParams();
@@ -58,12 +59,17 @@ const QuoteDetail: React.FC = () => {
                         },
                         issueDate: (quoteData as any).issueDate || (quoteData as any).issue_date,
                         expiryDate: (quoteData as any).expiryDate || (quoteData as any).expiry_date,
-                        items: (quoteData as any).items || [],
+                        items: ((quoteData as any).items || []).map((item: any) => ({
+                            ...item,
+                            unitPrice: item.unitPrice || item.unit_price || 0,
+                            quantity: Number(item.quantity) || 0,
+                            total: Number(item.total) || 0
+                        })),
                         status: (quoteData as any).status,
                         comments: (quoteData as any).comments || (quoteData as any).notes,
-                        subtotal: (quoteData as any).subtotal,
-                        tax: (quoteData as any).tax || (quoteData as any).tax_amount,
-                        total: (quoteData as any).total || (quoteData as any).total_amount,
+                        subtotal: Number((quoteData as any).subtotal) || 0,
+                        tax: Number((quoteData as any).tax || (quoteData as any).tax_amount) || 0,
+                        total: Number((quoteData as any).total || (quoteData as any).total_amount) || 0,
                     });
                 }
             } catch (error) {
@@ -153,33 +159,62 @@ const QuoteDetail: React.FC = () => {
                 await apiService.createQuote(quoteData);
             }
             navigate('/sales/quotes');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to save quote:', error);
+            alert(`Failed to save quote: ${error.message}`);
         }
     };
     
     const handleConvertToInvoice = async () => {
         if (!quote.contact || !quote.items) return;
 
+        // Ensure data types and field names are correct
         const invoiceData = {
-            contact_id: quote.contact.id,
+            contact_id: String(quote.contact.id),
             issue_date: new Date().toISOString().split('T')[0],
             due_date: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
-            items: quote.items,
-            notes: `Based on Quote #${quote.quoteNumber}`,
-            subtotal: quote.subtotal || 0,
-            tax: quote.tax || 0,
-            total: quote.total || 0,
+            items: quote.items.map(item => ({
+                description: item.description || '',
+                quantity: Number(item.quantity) || 0,
+                unitPrice: Number(item.unitPrice || item.unit_price) || 0,
+                total: Number(item.total) || 0,
+                product_id: item.product_id || null
+            })),
+            comments: `Based on Quote #${quote.quoteNumber || 'Unknown'}`,
+            subtotal: Number(quote.subtotal) || 0,
+            tax: Number(quote.tax) || 0,
+            total: Number(quote.total) || 0,
         };
 
         try {
+            console.log('Converting quote to invoice with data:', invoiceData);
             // @ts-ignore
             const newInvoice = await apiService.createInvoice(invoiceData);
-            await apiService.updateQuote(quote.id, { ...quote, status: 'Converted' });
-            // @ts-ignore
-            navigate(`/sales/invoice/${newInvoice.id}`);
-        } catch (error) {
+            console.log('Invoice created:', newInvoice);
+            // Properly map quote fields for update (backend expects *_date and *_amount names)
+            await apiService.updateQuote(String(quote.id), {
+                contact_id: String(quote.contact.id),
+                issue_date: quote.issueDate,
+                expiry_date: quote.expiryDate,
+                subtotal: Number(quote.subtotal) || 0,
+                tax_amount: Number(quote.tax) || 0,
+                total_amount: Number(quote.total) || 0,
+                notes: quote.comments || '',
+                status: 'Converted',
+                items: quote.items.map(item => ({
+                    description: item.description || '',
+                    quantity: Number(item.quantity) || 0,
+                    unitPrice: Number(item.unitPrice || item.unit_price) || 0,
+                    total: Number(item.total) || 0,
+                    product_id: item.product_id || null
+                }))
+            });
+            eventBus.emit('quoteConverted', { message: `Quote ${quote.quoteNumber} converted to Invoice successfully.` });
+            navigate('/sales/quotes');
+            // navigate(`/sales/invoice/${newInvoice.id}`); // optional navigation to invoice detail
+        } catch (error: any) {
             console.error('Failed to convert quote to invoice:', error);
+            alert(`Failed to convert quote: ${error.message || 'Unknown error'}`);
         }
     };
 

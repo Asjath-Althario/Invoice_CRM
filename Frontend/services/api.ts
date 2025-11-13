@@ -122,6 +122,27 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  async sendInvoiceEmail(id: string, recipientEmail?: string, recipientName?: string) {
+    return this.request(`/invoices/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify({ recipientEmail, recipientName }),
+    });
+  }
+
+  async sendInvoiceEmailWithPdf(id: string, pdfFile: File, recipientEmail?: string, recipientName?: string) {
+    const formData = new FormData();
+    if (recipientEmail) formData.append('recipientEmail', recipientEmail);
+    if (recipientName) formData.append('recipientName', recipientName);
+    formData.append('invoicePdf', pdfFile, pdfFile.name);
+    const url = `${API_BASE_URL}/invoices/${id}/send`;
+    const headers: HeadersInit = {};
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    const response = await fetch(url, { method: 'POST', body: formData, headers });
+    if (!response.ok) { const error = await response.text(); throw new Error(`API Error: ${response.status} - ${error}`); }
+    return response.json();
+  }
+
   // Quotes
   async getQuotes() {
     return this.request('/quotes');

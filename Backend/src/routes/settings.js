@@ -3,11 +3,12 @@ const db = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 // Get company profile
-router.get('/company-profile', async (req, res) => {
+router.get('/company-profile', authMiddleware, async (req, res) => {
   try {
     console.log('Fetching company profile...');
     const [rows] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
@@ -48,27 +49,37 @@ router.get('/company-profile', async (req, res) => {
 });
 
 // Update company profile
-router.put('/company-profile', async (req, res) => {
+router.put('/company-profile', authMiddleware, async (req, res) => {
   try {
-    console.log('Update company profile request body received');
+    console.log('=== UPDATE COMPANY PROFILE REQUEST ===');
     console.log('Request body keys:', Object.keys(req.body || {}));
     let { name, address, email, phone, logoUrl, website, taxId } = req.body || {};
-    console.log('logoUrl type:', typeof logoUrl, 'starts with data:image:', logoUrl?.startsWith?.('data:image/'));
+    
+    if (logoUrl) {
+      console.log('logoUrl type:', typeof logoUrl);
+      console.log('logoUrl length:', logoUrl?.length);
+      console.log('logoUrl starts with data:image:', logoUrl?.startsWith?.('data:image/'));
+      console.log('logoUrl preview:', logoUrl?.substring(0, 100) + '...');
+    }
 
     // Ensure a default row exists
+    console.log('Ensuring default profile row exists...');
     await db.query("INSERT IGNORE INTO company_profile (id, company_name) VALUES ('default', '')");
+    console.log('Default row check complete');
 
     // Validate base64 size if provided
     if (typeof logoUrl === 'string' && logoUrl.startsWith('data:image/')) {
+      console.log('Validating logo size...');
       try {
         const base64 = logoUrl.split(',')[1] || '';
         const approxBytes = Math.floor((base64.length * 3) / 4); // base64 -> bytes approximation
         const maxBytes = 2 * 1024 * 1024; // 2MB limit for upload
+        console.log('Estimated logo size:', approxBytes, 'bytes (max:', maxBytes, ')');
         if (approxBytes > maxBytes) {
           return res.status(413).json({ message: 'Logo image too large. Please upload an image under 2MB.' });
         }
       } catch (sizingErr) {
-        console.warn('Failed to estimate base64 size:', sizingErr);
+        console.error('Failed to estimate base64 size:', sizingErr);
       }
     }
 
@@ -82,15 +93,19 @@ router.put('/company-profile', async (req, res) => {
           const base64Data = match[2];
           const buffer = Buffer.from(base64Data, 'base64');
           const ext = mime.split('/')[1].replace('jpeg', 'jpg');
-          // FIX: Ensure uploads dir matches the static path configured in app.js (Backend/uploads)
+
+          // Save to Backend/uploads (match app.js static path)
           const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+
           if (!fs.existsSync(uploadsDir)) {
             fs.mkdirSync(uploadsDir, { recursive: true });
           }
+
           const filename = `company-logo-${Date.now()}.${ext}`;
           const filePath = path.join(uploadsDir, filename);
           fs.writeFileSync(filePath, buffer);
-          // Replace with public URL
+
+          // Replace with public URL (served by app.js at /uploads)
           logoUrl = `/uploads/${filename}`;
         } else {
           console.log('Base64 regex match failed');
@@ -107,8 +122,10 @@ router.put('/company-profile', async (req, res) => {
     }
 
     // Load existing profile
+    console.log('Loading existing profile...');
     const [existingRows] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
     const existing = existingRows[0] || {};
+    console.log('Existing profile loaded');
 
     // Merge partial update
     const next = {
@@ -123,14 +140,17 @@ router.put('/company-profile', async (req, res) => {
 
     console.log('Updating database with values:', {
       company_name: next.company_name,
-      logo_url: next.logo_url?.substring(0, 50) + '...' // truncate for logging
+      has_logo: !!next.logo_url,
+      logo_url_length: next.logo_url?.length,
+      logo_url_preview: next.logo_url?.substring(0, 50) + '...'
     });
 
-    await db.query(
+    const updateResult = await db.query(
       'UPDATE company_profile SET company_name = ?, address = ?, email = ?, phone = ?, logo_url = ?, website = ?, tax_id = ?, updated_at = NOW() WHERE id = ?',
       [ next.company_name, next.address, next.email, next.phone, next.logo_url, next.website, next.tax_id, 'default' ]
     );
 
+    console.log('Database update result:', updateResult);
     console.log('Database update completed successfully');
 
     const [profiles] = await db.query("SELECT * FROM company_profile WHERE id = 'default' LIMIT 1");
@@ -139,6 +159,7 @@ router.put('/company-profile', async (req, res) => {
       id: profile.id,
       logoUrl: profile.logo_url?.substring(0, 50) + '...'
     });
+
     const response = {
       id: profile.id,
       name: profile.company_name || '',
@@ -152,19 +173,30 @@ router.put('/company-profile', async (req, res) => {
 
     console.log('Sending response');
     res.json(response);
+
   } catch (error) {
-    console.error('Update company profile error:', error);
-    // Log MySQL details if present
+    console.error('=== UPDATE COMPANY PROFILE ERROR ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     if (error && (error.code || error.errno || error.sqlMessage)) {
-      console.error('DB Error details:', { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage });
+      console.error('DB Error details:', { 
+        code: error.code, 
+        errno: error.errno, 
+        sqlMessage: error.sqlMessage,
+        sql: error.sql 
+      });
     }
-    // Provide clearer error details to client for debugging
-    res.status(500).json({ message: 'Failed to update company profile', details: error.message });
+    res.status(500).json({ 
+      message: 'Failed to update company profile', 
+      details: error.message,
+      sqlMessage: error.sqlMessage || undefined
+    });
   }
 });
 
 // Get user preferences
-router.get('/preferences', async (req, res) => {
+router.get('/preferences', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const [preferencesRows] = await db.query('SELECT id, preferences FROM user_preferences WHERE user_id = ?', [userId]);
@@ -227,7 +259,7 @@ Report discrepancies within 7 days of receipt.`
 });
 
 // Update user preferences
-router.put('/preferences', async (req, res) => {
+router.put('/preferences', authMiddleware, async (req, res) => {
   try {
     if (!req.user || !req.user.id) {
       return res.status(401).json({ message: 'Authentication error: User not found on request.' });
@@ -235,11 +267,14 @@ router.put('/preferences', async (req, res) => {
     const userId = req.user.id;
     const incoming = req.body || {};
 
-    // Load existing to merge
     const [existingRows] = await db.query('SELECT preferences FROM user_preferences WHERE user_id = ?', [userId]);
     let existingPrefs = {};
     if (existingRows.length && existingRows[0].preferences) {
-      try { existingPrefs = typeof existingRows[0].preferences === 'string' ? JSON.parse(existingRows[0].preferences) : existingRows[0].preferences; } catch {}
+      try {
+        existingPrefs = typeof existingRows[0].preferences === 'string'
+          ? JSON.parse(existingRows[0].preferences)
+          : existingRows[0].preferences;
+      } catch {}
     }
 
     const merged = { ...existingPrefs, ...incoming };

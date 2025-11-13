@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, Trash2, DollarSign, Plus } from 'lucide-react';
+import { Edit, Trash2, DollarSign } from 'lucide-react';
 import { apiService } from '../../services/api';
 import type { Invoice } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/formatting';
@@ -53,17 +53,6 @@ const InvoiceList: React.FC = () => {
     
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-dark dark:text-light">Invoices</h1>
-                <button
-                    onClick={() => navigate('/sales/invoice')}
-                    className="flex items-center bg-primary text-white px-4 py-2 rounded-lg shadow-md hover:bg-primary/90 transition-colors"
-                >
-                    <Plus size={20} className="mr-2" />
-                    New Invoice
-                </button>
-            </div>
-
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
                 <div className="overflow-x-auto">
                 <table className="min-w-full bg-white dark:bg-gray-800">

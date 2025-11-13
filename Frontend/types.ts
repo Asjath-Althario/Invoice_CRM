@@ -129,6 +129,8 @@ export interface CompanyProfile {
   email: string;
   phone: string;
   logoUrl: string;
+  website?: string;
+  taxId?: string;
 }
 
 export interface User {

@@ -103,18 +103,23 @@ const Settings: React.FC = () => {
     };
     
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        console.log('Frontend: Logo file selected');
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+            console.log('Frontend: File selected:', file.name, 'Size:', file.size);
             if (file.size > 2 * 1024 * 1024) { // 2MB size limit (aligned with backend)
                 alert('Logo image is too large. Please select an image smaller than 2MB.');
                 return;
             }
             const reader = new FileReader();
             reader.onloadend = () => {
+                console.log('Frontend: File read complete, setting preview and profile');
                 setLogoPreview(reader.result as string);
                 setCompanyProfile(prev => ({ ...prev, logoUrl: reader.result as string }));
             };
             reader.readAsDataURL(file);
+        } else {
+            console.log('Frontend: No file selected');
         }
     };
     
@@ -122,7 +127,13 @@ const Settings: React.FC = () => {
         e.preventDefault();
         if (companyProfile) {
             try {
-                await apiService.updateCompanyProfile(companyProfile);
+                console.log('Frontend: Sending company profile update...');
+                // Use backend response to refresh local state, so base64 is replaced with served file URL (/uploads/..)
+                const updated = await apiService.updateCompanyProfile(companyProfile);
+                console.log('Frontend: Received updated profile:', updated);
+                setCompanyProfile(updated as CompanyProfile);
+                setLogoPreview((updated as any).logoUrl || (updated as any).logo_url || '');
+                eventBus.emit('dataChanged');
                 alert('Company profile updated!');
             } catch (error) {
                 console.error('Failed to update company profile:', error);

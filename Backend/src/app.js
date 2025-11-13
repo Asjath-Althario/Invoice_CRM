@@ -35,6 +35,7 @@ const purchaseUploadRoutes = require('./routes/purchaseUploads');
 const settingsRoutes = require('./routes/settings');
 const recurringInvoiceRoutes = require('./routes/recurringInvoices');
 const userRoutes = require('./routes/users');
+const subscriptionAutomationRoutes = require('./routes/subscriptionAutomation');
 
 // Public routes
 app.use('/api/auth', authRoutes);
@@ -52,6 +53,12 @@ app.use('/api/purchase-uploads', authMiddleware, purchaseUploadRoutes);
 app.use('/api/recurring-invoices', authMiddleware, recurringInvoiceRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/users', authMiddleware, userRoutes);
+app.use('/api/subscription-automation', subscriptionAutomationRoutes);
+
+// Start cron jobs for subscription automation
+const cronJobService = require('./services/cronJobService');
+cronJobService.start();
+console.log('✅ Subscription automation cron jobs started');
 
 // Health check
 app.get('/api/health', (req, res) => {
